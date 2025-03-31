@@ -1,21 +1,90 @@
 from fastapi import APIRouter, Depends, HTTPException
 from database import get_db
 from jose import JWTError, jwt
-from schemas import User
-import passlib.hash
+from schemas import LoginRequest, UserCreate
+import bcrypt
+from datetime import datetime, timedelta
+from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter()
 
-SECRET_KEY = "f6c7d661edec7b2b3a8e297c8c3b96c40f14072562a0c6f31a29463ac01b1833c9258a1095e56cc2091e78cf90d0dc271ad309752edb456bb1d9c9eacc9d9c91b131ff27d810f004b90e71a19d053ce4593e6634a9609fd84c277e56cee74a6b75ffc652eccdbe115d9120331493c84cd60b92abe07f41a1c8abfb8a793faeec2e3bbbf452277ee01c6928d85ca90206a3d720b3287b45cb84632b3eebef2cd55a8fa6748319a3c1bdf4c1c3a473905d2edd6de66a987a6d52b829952545abef2eafca7e25c8d754b98e9a4257b153a84ca23cb727bb8d52fb7b5d3af371fa8ec5506d3945ce214297ba3b67363375ea3629cdde95e12f77b9790362039b9f18"
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+SECRET_KEY = "your_real_secret_key"
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if isinstance(hashed_password, str):
+        hashed_password = hashed_password.encode('utf-8')  # ensure it's bytes
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password)
+
+@router.post("/register")
+def register(user: UserCreate, db=Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT UserId FROM Users WHERE Username=?", user.Username)
+    if cursor.fetchone():
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    hashed_pw = hash_password(user.Password)
+    cursor.execute("""
+        INSERT INTO Users (FullName, Username, PasswordHash, Email, Role, Team)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, user.FullName, user.Username, hashed_pw, user.Email, user.Role, user.Team)
+    db.commit()
+    return {"detail": "User created successfully"}
 
 @router.post("/login")
-def login(username: str, password: str, db=Depends(get_db)):
+def login(login_data: LoginRequest, db=Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT UserId, PasswordHash FROM Users WHERE Username=?", username)
+    cursor.execute("SELECT UserId, PasswordHash FROM Users WHERE Username=?", login_data.username)
     user = cursor.fetchone()
-    if user and passlib.hash.bcrypt.verify(password, user.PasswordHash):
-        token_data = {"user_id": user.UserId}
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+    user_id, password_hash = user
+
+    if verify_password(login_data.password, password_hash):
+        token_data = {
+            "user_id": user_id,
+            "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        }
         token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
         return {"access_token": token}
     raise HTTPException(status_code=401, detail="Invalid credentials")
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db=Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("user_id")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    cursor = db.cursor()
+    cursor.execute("SELECT UserId FROM Users WHERE UserId=?", user_id)
+    user = cursor.fetchone()
+    if user is None:
+        raise credentials_exception
+    return {"user_id": user_id}
+
+@router.get("/me")
+async def read_users_me(current_user: dict = Depends(get_current_user)):
+    return current_user
+
+@router.post("/logout")
+async def logout(current_user: dict = Depends(get_current_user)):
+    # In a stateless JWT setup, we don't need to do anything server-side
+    # The client will remove the token
+    return {"message": "Successfully logged out"}
