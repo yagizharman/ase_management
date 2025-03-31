@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreHorizontal, Clock } from "lucide-react"
+import { MoreHorizontal, Clock, Crown } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import type { Task } from "@/lib/types"
+import type { Task, TaskUpdateRequest } from "@/lib/types"
 import { tasksAPI, notificationsAPI } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
 import { toast } from "sonner"
@@ -24,6 +24,14 @@ interface TaskListProps {
 export default function TaskList({ tasks, onTaskUpdated }: TaskListProps) {
   const { user } = useAuth()
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const canEditTask = (task: Task) => {
+    return task.CreatedByUserId === user?.UserId
+  }
+
+  const canUpdateTask = (task: Task) => {
+    return task.CreatedByUserId === user?.UserId || task.AssignedToUserId === user?.UserId
+  }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -54,15 +62,16 @@ export default function TaskList({ tasks, onTaskUpdated }: TaskListProps) {
   }
 
   const handleStatusChange = async (task: Task, completed: boolean) => {
-    if (!user || !task.TaskId) return
+    if (!user || !task.TaskId || !canUpdateTask(task)) return
 
     try {
-      const updatedTask = {
-        ...task,
-        Status: completed ? "Completed" : "In Progress",
+      const updateData: TaskUpdateRequest = {
+        task_update: {
+          Status: completed ? "Completed" : "In Progress",
+        }
       }
 
-      await tasksAPI.updateTask(task.TaskId, updatedTask)
+      await tasksAPI.updateTask(task.TaskId, updateData, user.UserId)
 
       // Create notification for task status change
       if (task.CreatedByUserId !== user.UserId) {
@@ -74,25 +83,25 @@ export default function TaskList({ tasks, onTaskUpdated }: TaskListProps) {
       if (onTaskUpdated) {
         onTaskUpdated()
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Görev durumu güncellenemedi:", error)
-      toast.error("Görev durumu güncellenemedi")
+      toast.error(error.message || "Görev durumu güncellenemedi")
     }
   }
 
   const handleDeleteTask = async (taskId: number) => {
-    if (!taskId) return
+    if (!taskId || !user) return
 
     try {
-      await tasksAPI.deleteTask(taskId)
+      await tasksAPI.deleteTask(taskId, user.UserId)
       toast.success("Görev başarıyla silindi")
 
       if (onTaskUpdated) {
         onTaskUpdated()
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Görev silinemedi:", error)
-      toast.error("Görev silinemedi")
+      toast.error(error.message || "Görev silinemedi")
     }
   }
 
@@ -106,12 +115,21 @@ export default function TaskList({ tasks, onTaskUpdated }: TaskListProps) {
                 checked={task.Status === "Completed"}
                 onCheckedChange={(checked) => handleStatusChange(task, checked as boolean)}
                 className="mt-1"
+                disabled={!canUpdateTask(task)}
               />
               <div className="flex-1 space-y-1">
                 <div className="flex items-start justify-between">
-                  <Link href={`/tasks/${task.TaskId}`} className="font-medium hover:underline">
-                    {task.Title}
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/tasks/${task.TaskId}`} className="font-medium hover:underline">
+                      {task.Title}
+                    </Link>
+                    {task.CreatedByUserId === user?.UserId && (
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <Crown className="h-3 w-3" />
+                        Yönetici
+                      </Badge>
+                    )}
+                  </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -120,20 +138,24 @@ export default function TaskList({ tasks, onTaskUpdated }: TaskListProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditingTask(task)}>Düzenle</DropdownMenuItem>
+                      {canEditTask(task) && (
+                        <DropdownMenuItem onClick={() => setEditingTask(task)}>Düzenle</DropdownMenuItem>
+                      )}
                       <DropdownMenuItem asChild>
                         <Link href={`/tasks/${task.TaskId}`}>Detayları Görüntüle</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (task.TaskId) {
-                            handleDeleteTask(task.TaskId)
-                          }
-                        }}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        Sil
-                      </DropdownMenuItem>
+                      {canEditTask(task) && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (task.TaskId) {
+                              handleDeleteTask(task.TaskId)
+                            }
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          Sil
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

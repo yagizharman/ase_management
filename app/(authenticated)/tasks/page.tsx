@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Plus, Search, Filter } from "lucide-react"
-import TaskList from "@/components/task-list"
+import KanbanBoard from "@/components/kanban-board"
 import TaskModal from "@/components/task-modal"
 import { tasksAPI, usersAPI } from "@/lib/api"
 import type { Task } from "@/lib/types"
@@ -145,15 +145,13 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <TabsContent value="all" className="space-y-3">
+        <TabsContent value={activeTab} className="space-y-3">
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-[400px] w-full" />
             </div>
           ) : filteredTasks.length > 0 ? (
-            <TaskList tasks={filteredTasks} onTaskUpdated={fetchTasks} />
+            <KanbanBoard tasks={filteredTasks} onTaskUpdated={fetchTasks} />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <h3 className="text-lg font-medium">Görev bulunamadı</h3>
@@ -163,42 +161,6 @@ export default function TasksPage() {
               <Button onClick={() => setShowTaskModal(true)} className="mt-4">
                 <Plus className="mr-2 h-4 w-4" /> Görev Oluştur
               </Button>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="my" className="space-y-3">
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          ) : filteredTasks.length > 0 ? (
-            <TaskList tasks={filteredTasks} onTaskUpdated={fetchTasks} />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <h3 className="text-lg font-medium">Size atanmış görev yok</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Mevcut filtrelere uygun size atanmış görev bulunmuyor.
-              </p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="team" className="space-y-3">
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          ) : filteredTasks.length > 0 ? (
-            <TaskList tasks={filteredTasks} onTaskUpdated={fetchTasks} />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <h3 className="text-lg font-medium">Ekip görevi bulunamadı</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Mevcut filtrelere uygun ekibiniz için görev bulunmuyor.
-              </p>
             </div>
           )}
         </TabsContent>

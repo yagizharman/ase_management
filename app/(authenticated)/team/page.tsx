@@ -9,102 +9,79 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search, Mail, Phone, BarChart3 } from "lucide-react"
+import { Search, Mail, BarChart3 } from "lucide-react"
 import Link from "next/link"
-
-interface TeamMember {
-  userId: string
-  fullName: string
-  email: string
-  role: string
-  team: string
-  phone?: string
-  avatar?: string
-  taskCount: number
-  completedTasks: number
-  activeHours: number
-}
+import { usersAPI, tasksAPI } from "@/lib/api"
+import type { User } from "@/lib/types"
+import { toast } from "sonner"
 
 export default function TeamPage() {
   const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [teamMembers, setTeamMembers] = useState<User[]>([])
+  const [teams, setTeams] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>([])
+  const [filteredMembers, setFilteredMembers] = useState<User[]>([])
+  const [activeTab, setActiveTab] = useState("all")
+  const [memberStats, setMemberStats] = useState<{
+    [key: string]: { taskCount: number; completedTasks: number; activeHours: number }
+  }>({})
 
   useEffect(() => {
     const fetchTeamMembers = async () => {
+      if (!user) return
+
       try {
-        // In a real app, you would fetch from your API
-        // const response = await fetch(`/api/users`);
-        // const data = await response.json();
+        setIsLoading(true)
 
-        // Mock data for demonstration
-        setTimeout(() => {
-          const mockTeamMembers: TeamMember[] = [
-            {
-              userId: "1",
-              fullName: "John Doe",
-              email: "john.doe@example.com",
-              role: "Manager",
-              team: "Development",
-              phone: "+1 (555) 123-4567",
-              taskCount: 5,
-              completedTasks: 2,
-              activeHours: 38,
-            },
-            {
-              userId: "2",
-              fullName: "Jane Smith",
-              email: "jane.smith@example.com",
-              role: "Developer",
-              team: "Development",
-              phone: "+1 (555) 234-5678",
-              taskCount: 8,
-              completedTasks: 5,
-              activeHours: 42,
-            },
-            {
-              userId: "3",
-              fullName: "Bob Johnson",
-              email: "bob.johnson@example.com",
-              role: "Developer",
-              team: "Development",
-              phone: "+1 (555) 345-6789",
-              taskCount: 6,
-              completedTasks: 3,
-              activeHours: 35,
-            },
-            {
-              userId: "4",
-              fullName: "Alice Williams",
-              email: "alice.williams@example.com",
-              role: "Designer",
-              team: "Design",
-              phone: "+1 (555) 456-7890",
-              taskCount: 4,
-              completedTasks: 2,
-              activeHours: 32,
-            },
-            {
-              userId: "5",
-              fullName: "Charlie Brown",
-              email: "charlie.brown@example.com",
-              role: "QA Engineer",
-              team: "QA",
-              phone: "+1 (555) 567-8901",
-              taskCount: 7,
-              completedTasks: 4,
-              activeHours: 40,
-            },
-          ]
+        // Fetch all users from API
+        const allUsers = await usersAPI.getAllUsers()
+        setTeamMembers(allUsers)
 
-          setTeamMembers(mockTeamMembers)
-          setFilteredMembers(mockTeamMembers)
-          setIsLoading(false)
-        }, 1000)
+        // Extract unique teams
+        const uniqueTeams = Array.from(new Set(allUsers.map((member) => member.Team || "Diğer")))
+        setTeams(uniqueTeams)
+
+        // Fetch task stats for each member
+        const statsPromises = allUsers.map(async (member) => {
+          try {
+            const memberTasks = await tasksAPI.getUserTasks(member.UserId)
+
+            return {
+              userId: member.UserId,
+              stats: {
+                taskCount: memberTasks.length,
+                completedTasks: memberTasks.filter((t: any) => t.Status === "Completed").length,
+                activeHours: memberTasks.reduce((sum: number, task: any) => sum + (task.SpentHours || 0), 0),
+              },
+            }
+          } catch (error) {
+            console.error(`Kullanıcı ${member.UserId} için görev istatistikleri alınamadı:`, error)
+            return {
+              userId: member.UserId,
+              stats: {
+                taskCount: 0,
+                completedTasks: 0,
+                activeHours: 0,
+              },
+            }
+          }
+        })
+
+        const statsResults = await Promise.all(statsPromises)
+        const statsMap = statsResults.reduce(
+          (acc, item) => {
+            acc[item.userId] = item.stats
+            return acc
+          },
+          {} as { [key: string]: { taskCount: number; completedTasks: number; activeHours: number } },
+        )
+
+        setMemberStats(statsMap)
+        setIsLoading(false)
       } catch (error) {
-        console.error("Failed to fetch team members:", error)
+        console.error("Ekip üyeleri alınamadı:", error)
+        toast.error("Ekip üyeleri yüklenemedi")
         setIsLoading(false)
       }
     }
@@ -120,25 +97,30 @@ export default function TeamPage() {
       const query = searchQuery.toLowerCase()
       const filtered = teamMembers.filter(
         (member) =>
-          member.fullName.toLowerCase().includes(query) ||
-          member.email.toLowerCase().includes(query) ||
-          member.role.toLowerCase().includes(query) ||
-          member.team.toLowerCase().includes(query),
+          member.FullName.toLowerCase().includes(query) ||
+          member.Email.toLowerCase().includes(query) ||
+          member.Role.toLowerCase().includes(query) ||
+          (member.Team && member.Team.toLowerCase().includes(query)),
       )
       setFilteredMembers(filtered)
     } else {
-      setFilteredMembers(teamMembers)
+      // Filter by active tab
+      if (activeTab === "all") {
+        setFilteredMembers(teamMembers)
+      } else {
+        setFilteredMembers(teamMembers.filter((member) => member.Team === activeTab))
+      }
     }
-  }, [teamMembers, searchQuery])
+  }, [teamMembers, searchQuery, activeTab])
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight">Team</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Ekip</h1>
         <div className="relative w-full sm:w-64 md:w-80">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search team members..."
+            placeholder="Ekip üyelerini ara..."
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -146,15 +128,17 @@ export default function TeamPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="space-y-4">
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all">All Members</TabsTrigger>
-          <TabsTrigger value="development">Development</TabsTrigger>
-          <TabsTrigger value="design">Design</TabsTrigger>
-          <TabsTrigger value="qa">QA</TabsTrigger>
+          <TabsTrigger value="all">Tüm Üyeler</TabsTrigger>
+          {teams.map((team) => (
+            <TabsTrigger key={team} value={team}>
+              {team}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="all" className="space-y-4">
+        <TabsContent value={activeTab} className="space-y-4">
           {isLoading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[...Array(5)].map((_, i) => (
@@ -164,63 +148,17 @@ export default function TeamPage() {
           ) : filteredMembers.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredMembers.map((member) => (
-                <TeamMemberCard key={member.userId} member={member} />
+                <TeamMemberCard
+                  key={member.UserId}
+                  member={member}
+                  stats={memberStats[member.UserId] || { taskCount: 0, completedTasks: 0, activeHours: 0 }}
+                />
               ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <h3 className="text-lg font-medium">No team members found</h3>
-              <p className="text-sm text-muted-foreground mt-1">Try adjusting your search query.</p>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="development" className="space-y-4">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-[200px] w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredMembers
-                .filter((member) => member.team === "Development")
-                .map((member) => (
-                  <TeamMemberCard key={member.userId} member={member} />
-                ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="design" className="space-y-4">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-[200px] w-full" />
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredMembers
-                .filter((member) => member.team === "Design")
-                .map((member) => (
-                  <TeamMemberCard key={member.userId} member={member} />
-                ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="qa" className="space-y-4">
-          {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-[200px] w-full" />
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredMembers
-                .filter((member) => member.team === "QA")
-                .map((member) => (
-                  <TeamMemberCard key={member.userId} member={member} />
-                ))}
+              <h3 className="text-lg font-medium">Ekip üyesi bulunamadı</h3>
+              <p className="text-sm text-muted-foreground mt-1">Arama kriterlerinizi değiştirmeyi deneyin.</p>
             </div>
           )}
         </TabsContent>
@@ -228,8 +166,8 @@ export default function TeamPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Team Performance</CardTitle>
-          <CardDescription>Overview of team productivity and task completion</CardDescription>
+          <CardTitle>Ekip Performansı</CardTitle>
+          <CardDescription>Ekip üretkenliği ve görev tamamlama oranları</CardDescription>
         </CardHeader>
         <CardContent className="h-[400px] flex items-center justify-center">
           {isLoading ? (
@@ -237,9 +175,9 @@ export default function TeamPage() {
           ) : (
             <div className="text-center text-muted-foreground">
               <BarChart3 className="h-16 w-16 mx-auto mb-2" />
-              <p>Team performance chart would appear here</p>
+              <p>Ekip performans grafiği burada görünecek</p>
               <Button variant="link" asChild>
-                <Link href="/analytics">View detailed analytics</Link>
+                <Link href="/analytics">Detaylı analizi görüntüle</Link>
               </Button>
             </div>
           )}
@@ -249,27 +187,35 @@ export default function TeamPage() {
   )
 }
 
-function TeamMemberCard({ member }: { member: TeamMember }) {
+interface TeamMemberCardProps {
+  member: User
+  stats: {
+    taskCount: number
+    completedTasks: number
+    activeHours: number
+  }
+}
+
+function TeamMemberCard({ member, stats }: TeamMemberCardProps) {
   return (
     <Card>
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
           <Avatar className="h-12 w-12">
-            <AvatarImage src={member.avatar} alt={member.fullName} />
+            <AvatarImage src={member.avatar} alt={member.FullName} />
             <AvatarFallback>
-              {member.fullName
-                .split(" ")
+              {member.FullName.split(" ")
                 .map((n) => n[0])
                 .join("")}
             </AvatarFallback>
           </Avatar>
           <div className="space-y-1">
-            <h3 className="font-medium">{member.fullName}</h3>
+            <h3 className="font-medium">{member.FullName}</h3>
             <div className="flex items-center text-sm text-muted-foreground">
               <Badge variant="outline" className="mr-2">
-                {member.role}
+                {member.Role === "Manager" ? "Yönetici" : "Çalışan"}
               </Badge>
-              <span>{member.team}</span>
+              <span>{member.Team || "Belirtilmemiş"}</span>
             </div>
           </div>
         </div>
@@ -277,37 +223,31 @@ function TeamMemberCard({ member }: { member: TeamMember }) {
         <div className="mt-4 space-y-2">
           <div className="flex items-center text-sm">
             <Mail className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>{member.email}</span>
+            <span>{member.Email}</span>
           </div>
-          {member.phone && (
-            <div className="flex items-center text-sm">
-              <Phone className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span>{member.phone}</span>
-            </div>
-          )}
         </div>
 
         <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-2 text-center">
           <div>
-            <div className="text-lg font-medium">{member.taskCount}</div>
-            <div className="text-xs text-muted-foreground">Tasks</div>
+            <div className="text-lg font-medium">{stats.taskCount}</div>
+            <div className="text-xs text-muted-foreground">Görevler</div>
           </div>
           <div>
-            <div className="text-lg font-medium">{member.completedTasks}</div>
-            <div className="text-xs text-muted-foreground">Completed</div>
+            <div className="text-lg font-medium">{stats.completedTasks}</div>
+            <div className="text-xs text-muted-foreground">Tamamlanan</div>
           </div>
           <div>
-            <div className="text-lg font-medium">{member.activeHours}h</div>
-            <div className="text-xs text-muted-foreground">Active</div>
+            <div className="text-lg font-medium">{stats.activeHours}s</div>
+            <div className="text-xs text-muted-foreground">Aktif</div>
           </div>
         </div>
 
         <div className="mt-4 flex justify-between">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/team/${member.userId}`}>View Profile</Link>
+            <Link href={`/team/${member.UserId}`}>Profili Görüntüle</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/tasks?assignedTo=${member.userId}`}>View Tasks</Link>
+            <Link href={`/tasks?assignedTo=${member.UserId}`}>Görevleri Görüntüle</Link>
           </Button>
         </div>
       </CardContent>

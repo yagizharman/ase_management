@@ -119,9 +119,41 @@ export interface Task {
   ValueSize: string;
   Status: string;
   RoadMap: string;
+  Partners?: TaskPartner[];
 }
 
-export type TaskCreate = Omit<Task, 'TaskId'>;
+export interface TaskPartner {
+  TaskPartnerId?: number;
+  TaskId?: number;
+  UserId: number;
+  PlannedHours: number;
+  SpentHours: number;
+  RoadMap: string;
+}
+
+export interface TaskUpdate {
+  Title?: string;
+  Description?: string;
+  Priority?: string;
+  Team?: string;
+  StartDate?: string;
+  DueDate?: string;
+  AssignedToUserId?: number;
+  PlannedHours?: number;
+  SpentHours?: number;
+  ValueSize?: number;
+  Status?: string;
+  RoadMap?: string;
+}
+
+export interface TaskUpdateRequest {
+  task_update: TaskUpdate;
+  partners?: TaskPartner[];
+}
+
+export type TaskCreate = Omit<Task, 'TaskId'> & {
+  partners?: TaskPartner[];
+};
 
 // Tasks API
 export const tasksAPI = {
@@ -133,33 +165,22 @@ export const tasksAPI = {
     return fetchAPI(`/tasks/${taskId}`)
   },
 
-  getTasks: async (): Promise<Task[]> => {
-    const response = await fetch(`${API_BASE_URL}/tasks/`);
-    if (!response.ok) throw new Error('Failed to fetch tasks');
-    return response.json();
-  },
-
   createTask: async (task: TaskCreate): Promise<Task> => {
-    const response = await fetch(`${API_BASE_URL}/tasks/`, {
+    return fetchAPI("/tasks", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(task),
     });
-    if (!response.ok) throw new Error('Failed to create task');
-    return response.json();
   },
 
-  updateTask: async (taskId: number, taskData: any) => {
-    return fetchAPI(`/tasks/${taskId}`, {
+  updateTask: async (taskId: number, updateData: TaskUpdateRequest, userId: number) => {
+    return fetchAPI(`/tasks/${taskId}?user_id=${userId}`, {
       method: "PUT",
-      body: JSON.stringify(taskData),
+      body: JSON.stringify(updateData),
     })
   },
 
-  deleteTask: async (taskId: number) => {
-    return fetchAPI(`/tasks/${taskId}`, {
+  deleteTask: async (taskId: number, userId: number) => {
+    return fetchAPI(`/tasks/${taskId}?user_id=${userId}`, {
       method: "DELETE",
     })
   },

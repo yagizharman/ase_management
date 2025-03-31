@@ -51,3 +51,33 @@ class TaskCreate(TaskBase):
 
 class Task(TaskBase):
     TaskId: int
+
+class TaskUpdate(BaseModel):
+    Title: str
+    Description: Optional[str] = None
+    Priority: Optional[str] = None
+    Team: Optional[str] = None
+    StartDate: Optional[datetime] = None
+    DueDate: Optional[datetime] = None
+    AssignedToUserId: Optional[int] = None
+    PlannedHours: Optional[float] = None
+    SpentHours: Optional[float] = None
+    ValueSize: Optional[int] = None
+    Status: Optional[str] = None
+    RoadMap: Optional[str] = None
+
+class TaskPartnerBase(BaseModel):
+    UserId: int
+    PlannedHours: float
+    SpentHours: float = 0
+    RoadMap: str
+
+class TaskPartnerCreate(TaskPartnerBase):
+    pass
+
+class TaskPartner(TaskPartnerBase):
+    TaskPartnerId: int
+    TaskId: int
+
+class TaskWithPartners(Task):
+    Partners: List[TaskPartner] = []

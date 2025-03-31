@@ -26,7 +26,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { Task, TaskPartner, User } from "@/lib/types"
 import { tasksAPI, usersAPI, notificationsAPI } from "@/lib/api"
 import { toast } from "sonner"
-import { TaskCreate } from '../lib/api'
+import type { TaskCreate, TaskUpdateRequest } from '@/lib/api'
 
 interface TaskModalProps {
   open: boolean
@@ -59,16 +59,55 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
   const [partnerRoadMap, setPartnerRoadMap] = useState("")
 
   useEffect(() => {
-    // Fetch team members
+    // Fetch team members first
     const fetchTeamMembers = async () => {
       try {
         const members = await usersAPI.getAllUsers()
         setTeamMembers(members)
-
-        // Set default assigned user
+        
+        // Only after we have team members, set the assigned user for new tasks
         if (!task && user) {
-          setAssignedToUserId(user.UserId)
+          setAssignedToUserId(user.UserId.toString())
           setTeam(user.Team || "")
+        }
+        
+        // Then fetch task details if we have a task
+        if (task?.TaskId) {
+          try {
+            const taskDetails = await tasksAPI.getTaskById(task.TaskId)
+            setTitle(taskDetails.Title)
+            setDescription(taskDetails.Description || "")
+            setPriority(taskDetails.Priority as "Low" | "Medium" | "High")
+            setTeam(taskDetails.Team || "")
+            setStartDate(new Date(taskDetails.StartDate))
+            setDueDate(new Date(taskDetails.DueDate))
+            if (taskDetails.AssignedToUserId) {
+              setAssignedToUserId(taskDetails.AssignedToUserId.toString())
+            }
+            setPlannedHours(taskDetails.PlannedHours)
+            setSpentHours(taskDetails.SpentHours || 0)
+            setValueSize(taskDetails.ValueSize)
+            setStatus(taskDetails.Status as "Not Started" | "In Progress" | "Completed" | "On Hold")
+            setRoadMap(taskDetails.RoadMap)
+            setPartners(taskDetails.Partners || [])
+          } catch (error) {
+            console.error("Failed to fetch task details:", error)
+            toast.error("Failed to load task details")
+          }
+        } else {
+          // Reset form for new task
+          setTitle("")
+          setDescription("")
+          setPriority("Medium")
+          setTeam(user?.Team || "")
+          setStartDate(new Date())
+          setDueDate(new Date())
+          setPlannedHours(0)
+          setSpentHours(0)
+          setValueSize(5)
+          setStatus("Not Started")
+          setRoadMap("")
+          setPartners([])
         }
       } catch (error) {
         console.error("Failed to fetch team members:", error)
@@ -77,24 +116,6 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
     }
 
     fetchTeamMembers()
-
-    // If editing an existing task, populate the form
-    if (task) {
-      setTitle(task.Title)
-      setDescription(task.Description || "")
-      setPriority(task.Priority as "Low" | "Medium" | "High")
-      setTeam(task.Team || "")
-      setStartDate(new Date(task.StartDate))
-      setDueDate(new Date(task.DueDate))
-      setAssignedToUserId(task.AssignedToUserId)
-      setPlannedHours(task.PlannedHours)
-      setSpentHours(task.SpentHours || 0)
-      setValueSize(task.ValueSize)
-      setStatus(task.Status as "Not Started" | "In Progress" | "Completed" | "On Hold")
-      setRoadMap(task.RoadMap)
-
-      // TODO: Fetch task partners if needed
-    }
   }, [task, user])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -122,25 +143,43 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
         throw new Error("RoadMap should have at least 5 steps")
       }
 
-      const taskData: TaskCreate = {
-        Title: title,
-        Description: description,
-        Priority: priority,
-        Team: team,
-        StartDate: startDate.toISOString(),
-        DueDate: dueDate.toISOString(),
-        CreatedByUserId: user.UserId,
-        AssignedToUserId: Number(assignedToUserId),
-        PlannedHours: Number(plannedHours),
-        SpentHours: Number(spentHours),
-        ValueSize: valueSize.toString(),
-        Status: status,
-        RoadMap: roadMap,
-      }
-
       if (task?.TaskId) {
         // Update existing task
-        await tasksAPI.updateTask(task.TaskId, taskData)
+        const updateData: TaskUpdateRequest = {
+          task_update: {
+            Title: title,
+            Description: description,
+            Priority: priority,
+            Team: team,
+            StartDate: startDate.toISOString(),
+            DueDate: dueDate.toISOString(),
+            AssignedToUserId: Number(assignedToUserId),
+            PlannedHours: Number(plannedHours),
+            SpentHours: Number(spentHours),
+            ValueSize: valueSize,
+            Status: status,
+            RoadMap: roadMap,
+          }
+        }
+
+        // Only include partners field if we're updating partners
+        if (partners && partners.length > 0) {
+          updateData.partners = partners.map(p => ({
+            TaskId: task.TaskId,
+            UserId: p.UserId,
+            PlannedHours: p.PlannedHours,
+            SpentHours: p.SpentHours || 0,
+            RoadMap: p.RoadMap || ""
+          }))
+        } else {
+          // If no partners, explicitly set to empty array to clear all partners
+          updateData.partners = []
+        }
+
+        // Log the update data for debugging
+        console.log("Updating task with data:", JSON.stringify(updateData))
+
+        await tasksAPI.updateTask(task.TaskId, updateData)
 
         // Create notification for task update
         if (Number(assignedToUserId) !== user.UserId) {
@@ -152,7 +191,33 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
         }
       } else {
         // Create new task
-        const createdTask = await tasksAPI.createTask(taskData)
+        const taskData: TaskCreate = {
+          Title: title,
+          Description: description,
+          Priority: priority,
+          Team: team,
+          StartDate: startDate.toISOString(),
+          DueDate: dueDate.toISOString(),
+          CreatedByUserId: user.UserId,
+          AssignedToUserId: Number(assignedToUserId),
+          PlannedHours: Number(plannedHours),
+          SpentHours: Number(spentHours),
+          ValueSize: valueSize.toString(),
+          Status: status,
+          RoadMap: roadMap,
+        }
+
+        const createData: TaskCreate = {
+          ...taskData,
+          partners: partners.map(p => ({
+            UserId: p.UserId,
+            PlannedHours: p.PlannedHours,
+            SpentHours: p.SpentHours,
+            RoadMap: p.RoadMap
+          }))
+        }
+
+        const createdTask = await tasksAPI.createTask(createData)
 
         // Create notification for new task assignment
         if (Number(assignedToUserId) !== user.UserId) {
@@ -163,8 +228,6 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
             "assignment",
           )
         }
-
-        // TODO: Handle task partners
 
         if (onTaskCreated) {
           onTaskCreated()
@@ -206,7 +269,6 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
 
     const newPartner: TaskPartner = {
       UserId: Number(selectedPartnerId),
-      FullName: selectedPartner.FullName,
       PlannedHours: partnerPlannedHours,
       SpentHours: 0,
       RoadMap: partnerRoadMap,
@@ -329,9 +391,15 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
               <Label htmlFor="assignedTo" className="text-right">
                 Assigned To*
               </Label>
-              <Select value={assignedToUserId.toString()} onValueChange={(value) => setAssignedToUserId(Number(value))}>
+              <Select 
+                defaultValue={user?.UserId.toString()}
+                value={assignedToUserId ? assignedToUserId.toString() : undefined}
+                onValueChange={(value) => setAssignedToUserId(value)}
+              >
                 <SelectTrigger id="assignedTo" className="col-span-3">
-                  <SelectValue placeholder="Select team member" />
+                  <SelectValue>
+                    {teamMembers.find(m => m.UserId.toString() === assignedToUserId?.toString())?.FullName || "Select team member"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {teamMembers.map((member) => (
@@ -425,18 +493,20 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
               <div className="col-span-3 space-y-4">
                 {partners.length > 0 ? (
                   <div className="space-y-2">
-                    {partners.map((partner) => (
+                    {partners.map((partner) => {
+                      const partnerUser = teamMembers.find(m => m.UserId === partner.UserId)
+                      return (
                       <div key={partner.UserId} className="flex items-center justify-between p-2 border rounded-md">
                         <div className="flex items-center gap-2">
                           <Avatar className="h-6 w-6">
                             <AvatarFallback>
-                              {partner.FullName.split(" ")
+                              {partnerUser?.FullName.split(" ")
                                 .map((n) => n[0])
                                 .join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm font-medium">{partner.FullName}</p>
+                            <p className="text-sm font-medium">{partnerUser?.FullName}</p>
                             <p className="text-xs text-muted-foreground">{partner.PlannedHours} planned hours</p>
                           </div>
                         </div>
@@ -444,7 +514,7 @@ export default function TaskModal({ open, onOpenChange, task, onTaskCreated, onT
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">No partners added yet</p>

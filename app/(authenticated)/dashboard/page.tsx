@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Clock, AlertTriangle, CheckCircle2, Plus, BarChart3, ListTodo, Users } from "lucide-react"
 import Link from "next/link"
-import TaskList from "@/components/task-list"
+import KanbanBoard from "@/components/kanban-board"
 import TaskModal from "@/components/task-modal"
 import { tasksAPI } from "@/lib/api"
 import type { Task } from "@/lib/types"
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([])
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([])
   const [upcomingTasks, setUpcomingTasks] = useState<Task[]>([])
+  const [allTasks, setAllTasks] = useState<Task[]>([])
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [taskStats, setTaskStats] = useState({
     total: 0,
@@ -30,70 +31,71 @@ export default function DashboardPage() {
     notStarted: 0,
   })
 
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!user) return
+  const fetchTasks = async () => {
+    if (!user) return
 
-      try {
-        setIsLoading(true)
-        const allTasks = await tasksAPI.getAllTasks()
+    try {
+      setIsLoading(true)
+      const allTasksData = await tasksAPI.getAllTasks()
 
-        // Filter tasks for the current user
-        const userTasks = allTasks.filter((task: Task) => task.AssignedToUserId === user.UserId)
+      // Filter tasks for the current user
+      const userTasks = allTasksData.filter((task: Task) => task.AssignedToUserId === user.UserId)
+      setAllTasks(userTasks)
 
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
 
-        const tomorrow = new Date(today)
-        tomorrow.setDate(tomorrow.getDate() + 1)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
 
-        // Filter tasks by date
-        const todayTasksList = userTasks.filter((task: Task) => {
-          const dueDate = new Date(task.DueDate)
-          dueDate.setHours(0, 0, 0, 0)
-          return dueDate.getTime() === today.getTime()
+      // Filter tasks by date
+      const todayTasksList = userTasks.filter((task: Task) => {
+        const dueDate = new Date(task.DueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        return dueDate.getTime() === today.getTime()
+      })
+
+      const overdueTasksList = userTasks.filter((task: Task) => {
+        const dueDate = new Date(task.DueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        return dueDate.getTime() < today.getTime() && task.Status !== "Completed"
+      })
+
+      const upcomingTasksList = userTasks.filter((task: Task) => {
+        const dueDate = new Date(task.DueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        return dueDate.getTime() > today.getTime()
+      })
+
+      setTodayTasks(todayTasksList)
+      setOverdueTasks(overdueTasksList)
+      setUpcomingTasks(upcomingTasksList)
+
+      // Calculate task stats
+      setTaskStats({
+        total: userTasks.length,
+        completed: userTasks.filter((t: Task) => t.Status === "Completed").length,
+        inProgress: userTasks.filter((t: Task) => t.Status === "In Progress").length,
+        notStarted: userTasks.filter((t: Task) => t.Status === "Not Started").length,
+      })
+
+      // Show alert for overdue tasks
+      if (overdueTasksList.length > 0) {
+        toast.error(`${overdueTasksList.length} adet gecikmiş göreviniz var`, {
+          description: "Bu görevler acil dikkat gerektiriyor.",
         })
-
-        const overdueTasksList = userTasks.filter((task: Task) => {
-          const dueDate = new Date(task.DueDate)
-          dueDate.setHours(0, 0, 0, 0)
-          return dueDate.getTime() < today.getTime() && task.Status !== "Completed"
-        })
-
-        const upcomingTasksList = userTasks.filter((task: Task) => {
-          const dueDate = new Date(task.DueDate)
-          dueDate.setHours(0, 0, 0, 0)
-          return dueDate.getTime() > today.getTime()
-        })
-
-        setTodayTasks(todayTasksList)
-        setOverdueTasks(overdueTasksList)
-        setUpcomingTasks(upcomingTasksList)
-
-        // Calculate task stats
-        setTaskStats({
-          total: userTasks.length,
-          completed: userTasks.filter((t: Task) => t.Status === "Completed").length,
-          inProgress: userTasks.filter((t: Task) => t.Status === "In Progress").length,
-          notStarted: userTasks.filter((t: Task) => t.Status === "Not Started").length,
-        })
-
-        // Show alert for overdue tasks
-        if (overdueTasksList.length > 0) {
-          toast.error(`${overdueTasksList.length} adet gecikmiş göreviniz var`, {
-            description: "Bu görevler acil dikkat gerektiriyor.",
-          })
-        }
-      } catch (error) {
-        console.error("Gösterge paneli verileri alınamadı:", error)
-        toast.error("Görevler yüklenemedi", {
-          description: "Lütfen daha sonra tekrar deneyin",
-        })
-      } finally {
-        setIsLoading(false)
       }
+    } catch (error) {
+      console.error("Gösterge paneli verileri alınamadı:", error)
+      toast.error("Görevler yüklenemedi", {
+        description: "Lütfen daha sonra tekrar deneyin",
+      })
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     if (user) {
       fetchTasks()
     }
@@ -171,8 +173,9 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="today" className="space-y-3">
+      <Tabs defaultValue="kanban" className="space-y-3">
         <TabsList>
+          <TabsTrigger value="kanban">Kanban Panosu</TabsTrigger>
           <TabsTrigger value="today">
             Bugünkü Görevler
             {todayTasks.length > 0 && (
@@ -198,6 +201,28 @@ export default function DashboardPage() {
             )}
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="kanban" className="space-y-3">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-[400px] w-full" />
+            </div>
+          ) : allTasks.length > 0 ? (
+            <KanbanBoard tasks={allTasks} onTaskUpdated={fetchTasks} />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <CheckCircle2 className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">Hiç görev bulunamadı</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Henüz hiç göreviniz yok. Yeni bir görev oluşturmak için tıklayın.
+              </p>
+              <Button onClick={() => setShowTaskModal(true)} className="mt-4">
+                <Plus className="mr-2 h-4 w-4" /> Görev Oluştur
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="today" className="space-y-3">
           {isLoading ? (
             <div className="space-y-3">
@@ -205,7 +230,7 @@ export default function DashboardPage() {
               <Skeleton className="h-20 w-full" />
             </div>
           ) : todayTasks.length > 0 ? (
-            <TaskList tasks={todayTasks} />
+            <KanbanBoard tasks={todayTasks} onTaskUpdated={fetchTasks} />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <CheckCircle2 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -219,13 +244,14 @@ export default function DashboardPage() {
             </div>
           )}
         </TabsContent>
+
         <TabsContent value="overdue" className="space-y-3">
           {isLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
             </div>
           ) : overdueTasks.length > 0 ? (
-            <TaskList tasks={overdueTasks} />
+            <KanbanBoard tasks={overdueTasks} onTaskUpdated={fetchTasks} />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <CheckCircle2 className="h-12 w-12 text-muted-foreground mb-4" />
@@ -236,13 +262,14 @@ export default function DashboardPage() {
             </div>
           )}
         </TabsContent>
+
         <TabsContent value="upcoming" className="space-y-3">
           {isLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-20 w-full" />
             </div>
           ) : upcomingTasks.length > 0 ? (
-            <TaskList tasks={upcomingTasks} />
+            <KanbanBoard tasks={upcomingTasks} onTaskUpdated={fetchTasks} />
           ) : (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <Clock className="h-12 w-12 text-muted-foreground mb-4" />
@@ -330,6 +357,7 @@ export default function DashboardPage() {
           onOpenChange={setShowTaskModal}
           onTaskCreated={() => {
             toast.success("Görev başarıyla oluşturuldu")
+            fetchTasks()
           }}
         />
       )}
