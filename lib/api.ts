@@ -1,229 +1,140 @@
-// Base API URL - change this to your FastAPI backend URL
 const API_BASE_URL = "http://localhost:8000/api"
 
-// Custom error class for API errors
-export class APIError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code?: string,
-    public details?: any
-  ) {
-    super(message)
-    this.name = 'APIError'
-  }
+interface ApiOptions {
+  headers?: Record<string, string>
+  body?: any
 }
 
-// Helper function for API requests
-async function fetchAPI(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem("token")
+class ApiClient {
+  async request(endpoint: string, method: string, options: ApiOptions = {}) {
+    const url = `${API_BASE_URL}${endpoint}`
 
-  const headers = {
-    "Content-Type": "application/json",
-    ...(token && { Authorization: `Bearer ${token}` }),
-    ...options.headers,
-  }
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  })
+    const headers: Record<string, string> = {
+      ...options.headers,
+    }
 
-  // Check if the response has content
-  const contentType = response.headers.get("content-type")
-  const hasJsonContent = contentType && contentType.includes("application/json")
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`
+    }
 
-  let data = null
-  if (hasJsonContent) {
+    if (method !== "GET" && options.body && typeof options.body === "object" && !(options.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json"
+    }
+
+    const config: RequestInit = {
+      method,
+      headers,
+      credentials: "include",
+    }
+
+    if (options.body) {
+      if (typeof options.body === "string") {
+        config.body = options.body
+      } else if (options.body instanceof FormData) {
+        config.body = options.body
+      } else {
+        config.body = JSON.stringify(options.body)
+      }
+    }
+
     try {
-      data = await response.json()
-    } catch {
-      data = null
+      const response = await fetch(url, config)
+
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        localStorage.removeItem("token")
+        if (typeof window !== "undefined") {
+          window.location.href = "/login"
+        }
+        throw new Error("Unauthorized")
+      }
+
+      // For 204 No Content, return null
+      if (response.status === 204) {
+        return null
+      }
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Something went wrong")
+      }
+
+      return data
+    } catch (error) {
+      console.error("API request failed:", error)
+      throw error
     }
   }
 
-  if (!response.ok) {
-    throw new APIError(
-      (data && data.detail) || `API error: ${response.status}`,
-      response.status,
-      data?.code,
-      data
+  get(endpoint: string, options: ApiOptions = {}) {
+    return this.request(endpoint, "GET", options)
+  }
+
+  post(endpoint: string, body: any, options: ApiOptions = {}) {
+    return this.request(endpoint, "POST", { ...options, body })
+  }
+
+  put(endpoint: string, body: any, options: ApiOptions = {}) {
+    return this.request(endpoint, "PUT", { ...options, body })
+  }
+
+  patch(endpoint: string, body: any, options: ApiOptions = {}) {
+    return this.request(endpoint, "PATCH", { ...options, body })
+  }
+
+  delete(endpoint: string, options: ApiOptions = {}) {
+    return this.request(endpoint, "DELETE", options)
+  }
+
+  // For email notifications
+  sendEmailNotification(taskId: number, recipients: string[], subject: string, body: string) {
+    return this.post("/notifications/email", {
+      task_id: taskId,
+      recipients,
+      subject,
+      body,
+    })
+  }
+
+  // For analytics
+  getTaskDistribution(userId: number, startDate: string, endDate: string) {
+    return this.get(`/analytics/user-task-distribution?user_id=${userId}&start_date=${startDate}&end_date=${endDate}`)
+  }
+
+  getTeamPerformance(teamId: number, startDate: string, endDate: string) {
+    return this.get(`/analytics/team-performance?team_id=${teamId}&start_date=${startDate}&end_date=${endDate}`)
+  }
+
+  // For task optimization
+  getOptimizedTaskDistribution(userId: number, startDate: string, endDate: string, method: string) {
+    return this.get(
+      `/analytics/optimized-distribution?user_id=${userId}&start_date=${startDate}&end_date=${endDate}&method=${method}`,
     )
   }
 
-  return data
-}
+  // For daily tasks
+  getDailyTasks(userId: number) {
+    const today = new Date().toISOString().split("T")[0]
+    return this.get(`/users/${userId}/tasks?date=${today}`)
+  }
 
-// Auth API
-export const authAPI = {
-  login: async (username: string, password: string) => {
-    return fetchAPI("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password }),
+  // For task history with comments
+  getTaskHistory(taskId: number) {
+    return this.get(`/tasks/${taskId}/history`)
+  }
+
+  // For logging effort with comments
+  logTaskEffort(taskId: number, userId: number, hours: number, details: string) {
+    return this.put(`/tasks/${taskId}/effort`, {
+      user_id: userId,
+      hours,
+      details,
     })
-  },
-
-  getCurrentUser: async () => {
-    const token = localStorage.getItem("token")
-    if (!token) return null
-
-    try {
-      const userData = await fetchAPI("/auth/me")
-      return userData
-    } catch (error) {
-      console.error("Failed to get current user:", error)
-      localStorage.removeItem("token")
-      return null
-    }
-  },
-
-  logout: async () => {
-    try {
-      await fetchAPI("/auth/logout", {
-        method: "POST",
-      })
-    } catch (error) {
-      console.error("Logout error:", error)
-    }
-  },
+  }
 }
 
-// Users API
-export const usersAPI = {
-  getAllUsers: async () => {
-    return fetchAPI("/users")
-  },
-
-  getUserById: async (userId: number) => {
-    return fetchAPI(`/users/${userId}`)
-  },
-
-  getUserTasks: async (userId: number) => {
-    return fetchAPI(`/users/${userId}/tasks`)
-  },
-}
-
-// Task interface
-export interface Task {
-  TaskId: number;
-  Title: string;
-  Description: string;
-  Priority: string;
-  Team: string;
-  StartDate: string;
-  DueDate: string;
-  CreatedByUserId: number;
-  AssignedToUserId: number;
-  PlannedHours: number;
-  SpentHours: number;
-  ValueSize: string;
-  Status: string;
-  RoadMap: string;
-  Partners?: TaskPartner[];
-}
-
-export interface TaskPartner {
-  TaskPartnerId?: number;
-  TaskId?: number;
-  UserId: number;
-  PlannedHours: number;
-  SpentHours: number;
-  RoadMap: string;
-}
-
-export interface TaskUpdate {
-  Title?: string;
-  Description?: string;
-  Priority?: string;
-  Team?: string;
-  StartDate?: string;
-  DueDate?: string;
-  AssignedToUserId?: number;
-  PlannedHours?: number;
-  SpentHours?: number;
-  ValueSize?: number;
-  Status?: string;
-  RoadMap?: string;
-}
-
-export interface TaskUpdateRequest {
-  task_update: TaskUpdate;
-  partners?: TaskPartner[];
-}
-
-export type TaskCreate = Omit<Task, 'TaskId'> & {
-  partners?: TaskPartner[];
-};
-
-// Tasks API
-export const tasksAPI = {
-  getAllTasks: async () => {
-    return fetchAPI("/tasks")
-  },
-
-  getTaskById: async (taskId: number) => {
-    return fetchAPI(`/tasks/${taskId}`)
-  },
-
-  createTask: async (task: TaskCreate): Promise<Task> => {
-    return fetchAPI("/tasks", {
-      method: 'POST',
-      body: JSON.stringify(task),
-    });
-  },
-
-  updateTask: async (taskId: number, updateData: TaskUpdateRequest, userId: number) => {
-    return fetchAPI(`/tasks/${taskId}?user_id=${userId}`, {
-      method: "PUT",
-      body: JSON.stringify(updateData),
-    })
-  },
-
-  deleteTask: async (taskId: number, userId: number) => {
-    return fetchAPI(`/tasks/${taskId}?user_id=${userId}`, {
-      method: "DELETE",
-    })
-  },
-}
-
-// Notifications API
-export const notificationsAPI = {
-  getNotifications: async (receiverUserId: number) => {
-    return fetchAPI(`/notifications?receiver_user_id=${receiverUserId}`)
-  },
-
-  createNotification: async (
-    taskId: number,
-    senderUserId: number,
-    receiverUserId: number,
-    notificationType: string,
-  ) => {
-    return fetchAPI("/notifications", {
-      method: "POST",
-      body: JSON.stringify({
-        task_id: taskId,
-        sender_user_id: senderUserId,
-        receiver_user_id: receiverUserId,
-        notification_type: notificationType,
-      }),
-    })
-  },
-
-  markAsRead: async (notificationId: number) => {
-    return fetchAPI(`/notifications/${notificationId}/read`, {
-      method: "PUT",
-    })
-  },
-}
-
-// Analytics API
-export const analyticsAPI = {
-  getUserTaskDistribution: async (userId: number, startDate: string, endDate: string) => {
-    return fetchAPI(`/analytics/user-task-distribution?userId=${userId}&startDate=${startDate}&endDate=${endDate}`)
-  },
-
-  getTeamPerformance: async (teamId: string, startDate: string, endDate: string) => {
-    return fetchAPI(`/analytics/performance?teamId=${teamId}&startDate=${startDate}&endDate=${endDate}`)
-  },
-}
+export const api = new ApiClient()
 

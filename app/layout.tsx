@@ -1,25 +1,15 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "sonner"
+import { Inter } from "next/font/google"
 import "./globals.css"
-import { AuthProvider } from "@/hooks/use-auth"
-import HeaderWrapper from "@/components/header-wrapper"
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/context/auth-context"
+import { Toaster } from "sonner"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-})
+const inter = Inter({ subsets: ["latin"] })
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
-
-export const metadata: Metadata = {
-  title: "İş Yönetim ve Takip Platformu",
-  description: "Kurumsal ekipler için görev yönetim platformu",
+export const metadata = {
+  title: "Task Management System",
+  description: "A comprehensive task management system for teams",
 }
 
 export default function RootLayout({
@@ -28,15 +18,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="tr" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            
-              {children}
-           
+            {children}
           </AuthProvider>
           <Toaster position="top-right" />
+
         </ThemeProvider>
       </body>
     </html>
