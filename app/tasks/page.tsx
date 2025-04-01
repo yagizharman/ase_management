@@ -535,7 +535,7 @@ export default function TasksPage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-5 h-[calc(100vh-300px)] overflow-y-auto absolute">
             {statusColumns.map((column) => (
               <KanbanBoard
                 key={column.id}

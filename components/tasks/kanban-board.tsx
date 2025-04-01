@@ -70,7 +70,7 @@ export function KanbanBoard<T extends Task>({
 
   return (
     <Card
-      className={`h-full flex flex-col ${isOver ? "ring-2 ring-primary ring-inset bg-primary/5" : ""}`}
+      className={` flex flex-col ${isOver ? "ring-2 ring-primary ring-inset bg-primary/5" : ""}`}
       ref={setNodeRef}
     >
       <CardHeader className="p-3 pb-0">
@@ -79,7 +79,7 @@ export function KanbanBoard<T extends Task>({
           <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs">{tasks.length}</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-3 overflow-y-auto max-h-full flex-1">
+      <CardContent className="p-3 overflow-hidden  flex-1">
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(3)].map((_, i) => (
