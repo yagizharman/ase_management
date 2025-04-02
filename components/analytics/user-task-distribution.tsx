@@ -59,7 +59,6 @@ export function UserTaskDistribution({ userId, isManager = false }: UserTaskDist
     to: new Date(),
   })
   const [timeRangePreset, setTimeRangePreset] = useState<string>("week")
-  const [optimizationParam, setOptimizationParam] = useState<string>("priority")
   const [teamMembers, setTeamMembers] = useState<Array<{ id: number; name: string }>>([])
 
   useEffect(() => {
@@ -80,7 +79,7 @@ export function UserTaskDistribution({ userId, isManager = false }: UserTaskDist
         }
 
         const response = await api.get(
-          `/analytics/user-detailed-distribution?user_id=${targetUserId}&start_date=${startDate}&end_date=${endDate}&optimization_param=${optimizationParam}`,
+          `/analytics/user-detailed-distribution?user_id=${targetUserId}&start_date=${startDate}&end_date=${endDate}`,
         )
 
         setDistribution(response)
@@ -106,7 +105,7 @@ export function UserTaskDistribution({ userId, isManager = false }: UserTaskDist
 
     fetchDistribution()
     fetchTeamMembers()
-  }, [userId, user?.id, dateRange, optimizationParam, user?.team_id, isManager])
+  }, [userId, user?.id, dateRange, user?.team_id, isManager])
 
   const handleTimeRangeChange = (value: string) => {
     setTimeRangePreset(value)
@@ -200,16 +199,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
                 </SelectContent>
               </Select>
 
-              <Select value={optimizationParam} onValueChange={setOptimizationParam}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Optimizasyon parametresi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="priority">Öncelik</SelectItem>
-                  <SelectItem value="size">İş Büyüklüğü</SelectItem>
-                  <SelectItem value="deadline">Tamamlanma Tarihi</SelectItem>
-                </SelectContent>
-              </Select>
+              
             </div>
 
             <div className="flex-shrink-0">
