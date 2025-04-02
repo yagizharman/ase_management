@@ -37,8 +37,8 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-muted/40">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Task Management System</CardTitle>
-          <CardDescription>Enter your credentials to sign in to your account</CardDescription>
+          <CardTitle className="text-2xl font-bold">Görev Yönetim Sistemi</CardTitle>
+          <CardDescription>Görev Yönetim Sistemine Hoş Geldiniz</CardDescription>
         </CardHeader>
         <CardContent>
           {error && (
@@ -50,7 +50,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">Kullanıcı Adı</Label>
                 <Input
                   id="username"
                   type="text"
@@ -61,7 +61,7 @@ export default function LoginPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Şifre</Label>
                 <Input
                   id="password"
                   type="password"
@@ -72,16 +72,12 @@ export default function LoginPage() {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? "Giriş Yapılıyor..." : "Giriş Yap"}
               </Button>
             </div>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Task Management System for Corporate Software Department
-          </p>
-        </CardFooter>
+
       </Card>
     </div>
   );
