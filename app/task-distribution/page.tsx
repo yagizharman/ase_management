@@ -112,6 +112,14 @@ export default function TaskAnalyticsPage() {
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [error, setError] = useState("")
 
+  const isOverdue = (task: Task) => {
+    const completionDate = new Date(task.completion_date)
+    completionDate.setHours(23, 59, 59, 999) // Set to end of the day
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // Set to start of the day
+    return completionDate < today && task.status !== "Completed"
+  }
+
   // Filters and sorting
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 30),
@@ -172,7 +180,7 @@ export default function TaskAnalyticsPage() {
 
         // Add user details to assignees
         const tasksWithUserDetails = tasksData.map((task: Task) => {
-          const assigneesWithUsers = task.assignees.map((assignee) => {
+          const assigneesWithUsers = task.assignees.map((assignee: TaskAssignee) => {
             const assigneeUser = usersData.find((u: any) => u.id === assignee.user_id)
             return {
               ...assignee,
@@ -188,8 +196,8 @@ export default function TaskAnalyticsPage() {
 
         // Filter tasks if a specific user is selected (for managers)
         if (user.role === 'manager' && selectedUserId) {
-          const filteredTasks = tasksWithUserDetails.filter(task => 
-            task.assignees.some(assignee => assignee.user_id === selectedUserId)
+          const filteredTasks = tasksWithUserDetails.filter((task: Task) => 
+            task.assignees.some((assignee: TaskAssignee) => assignee.user_id === selectedUserId)
           )
           setTasks(filteredTasks)
         } else {
@@ -711,14 +719,6 @@ export default function TaskAnalyticsPage() {
       )
     }
     return null
-  }
-
-  const isOverdue = (task: Task) => {
-    const completionDate = new Date(task.completion_date)
-    completionDate.setHours(23, 59, 59, 999) // Set to end of the day
-    const today = new Date()
-    today.setHours(0, 0, 0, 0) // Set to start of the day
-    return completionDate < today && task.status !== "Completed"
   }
 
   return (
