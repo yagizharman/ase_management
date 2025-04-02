@@ -32,6 +32,7 @@ import { TaskDistributionChart } from "@/components/dashboard/task-distribution-
 import { TaskStatusSummary } from "@/components/dashboard/task-status-summary"
 import { RecentTasks } from "@/components/dashboard/recent-tasks"
 import { TeamPerformance } from "@/components/dashboard/team-performance"
+import { UserTaskDistribution } from "@/components/analytics/user-task-distribution"
 
 interface Task {
   id: number
@@ -325,25 +326,9 @@ export default function DashboardPage() {
 
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-3">
-            <Card className="md:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-medium">Görev Dağılımı</CardTitle>
-                <CardDescription>Zaman içindeki görev dağılımınız</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TaskDistributionChart userId={user?.id} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-medium">Görev Durumu</CardTitle>
-                <CardDescription>Mevcut görev durumu dağılımı</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TaskStatusSummary tasks={tasks} isLoading={isLoading} />
-              </CardContent>
-            </Card>
+            <div className="md:col-span-5">
+          <UserTaskDistribution userId={user?.id} /> 
+            </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">

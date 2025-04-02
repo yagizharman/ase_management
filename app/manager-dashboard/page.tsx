@@ -10,9 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Users, CheckCircle2, AlertTriangle, Calendar, ArrowRight, PlusCircle, Timer } from "lucide-react"
+import { Users, CheckCircle2, AlertTriangle, Calendar, ArrowRight, PlusCircle, Timer } from 'lucide-react'
 import { ManagerAlerts } from "@/components/dashboard/manager-alerts"
-import { TaskDistributionChart } from "@/components/dashboard/task-distribution-chart"
+import { TeamTaskDistribution } from "@/components/analytics/team-task-distribution"
 import { TeamPerformance } from "@/components/dashboard/team-performance"
 import Link from "next/link"
 import { format } from "date-fns"
@@ -121,6 +121,16 @@ export default function ManagerDashboardPage() {
           </Button>
         </Link>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg font-medium">Ekip Görev Dağılımı</CardTitle>
+          <CardDescription>Optimize edilmiş görev dağılımı</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TeamTaskDistribution />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-4 mb-6">
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
@@ -250,24 +260,11 @@ export default function ManagerDashboardPage() {
 
       <ManagerAlerts teamId={user.team_id} />
 
-      <Tabs defaultValue="distribution" className="mt-6">
+      <Tabs defaultValue="performance" className="mt-6">
         <TabsList>
-          <TabsTrigger value="distribution">Görev Dağılımı</TabsTrigger>
           <TabsTrigger value="performance">Ekip Performansı</TabsTrigger>
           <TabsTrigger value="upcoming">Yaklaşan Görevler</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="distribution" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ekip Görev Dağılımı</CardTitle>
-              <CardDescription>Ekibiniz genelinde görev dağılımını görüntüleyin ve optimize edin</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TaskDistributionChart userId={user.id} isManager={true} teamId={user.team_id} />
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="performance" className="mt-4">
           <Card>
@@ -362,4 +359,3 @@ export default function ManagerDashboardPage() {
     </AppShell>
   )
 }
-

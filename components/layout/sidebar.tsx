@@ -63,10 +63,10 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen }: SidebarProps) {
       active: pathname === "/yearly-tasks",
     },
     {
-      label: "Analitikler",
+      label: "Görev Dağılımı",
       icon: BarChart3,
-      href: "/analytics",
-      active: pathname === "/analytics",
+      href: "/task-distribution",
+      active: pathname === "/task-distribution",
     },
     // Manager-only routes
     ...(isManager
