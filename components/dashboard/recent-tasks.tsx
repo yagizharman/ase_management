@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
-import { ArrowRight, Clock, AlertTriangle } from "lucide-react"
+import { ArrowRight, Clock, AlertTriangle, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 
 interface Task {
@@ -34,7 +34,28 @@ export function RecentTasks({ userId }: RecentTasksProps) {
       try {
         setIsLoading(true)
         const response = await api.get(`/users/${userId}/tasks?limit=5&sort=created_at:desc`)
-        setTasks(response)
+        
+        // Sort tasks: Incomplete first, then by completion status, then by priority
+        const sortedTasks = response.sort((a: Task, b: Task) => {
+          // First sort by completion status (incomplete first)
+          if (a.status === "Completed" && b.status !== "Completed") return 1
+          if (a.status !== "Completed" && b.status === "Completed") return -1
+
+          // Then sort by overdue status
+          const isAOverdue = isOverdue(a)
+          const isBOverdue = isOverdue(b)
+          if (isAOverdue && !isBOverdue) return -1
+          if (!isAOverdue && isBOverdue) return 1
+
+          // Finally sort by priority
+          const priorityOrder = { High: 0, Medium: 1, Low: 2 }
+          return (
+            priorityOrder[a.priority as keyof typeof priorityOrder] -
+            priorityOrder[b.priority as keyof typeof priorityOrder]
+          )
+        })
+
+        setTasks(sortedTasks)
       } catch (err: any) {
         setError(err.message || "Görevler yüklenirken hata oluştu")
         console.error("Error fetching recent tasks:", err)
@@ -51,7 +72,7 @@ export function RecentTasks({ userId }: RecentTasksProps) {
       case "High":
         return "destructive"
       case "Medium":
-        return "warning"
+        return "default"
       case "Low":
         return "secondary"
       default:
@@ -111,7 +132,6 @@ export function RecentTasks({ userId }: RecentTasksProps) {
     completionDate.setHours(23, 59, 59, 999) // Set to end of the day
     const today = new Date()
     today.setHours(0, 0, 0, 0) // Set to start of the day
-    console.log(completionDate, today, task.status)
     return completionDate < today && task.status !== "Completed"
   }
 
@@ -119,7 +139,7 @@ export function RecentTasks({ userId }: RecentTasksProps) {
     return (
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <Skeleton key={i} className="h-20 w-full" />
         ))}
       </div>
     )
@@ -135,31 +155,59 @@ export function RecentTasks({ userId }: RecentTasksProps) {
 
   return (
     <div className="space-y-4">
-      {tasks.map((task) => (
-        <Card key={task.id} className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h4 className="font-medium">{task.description}</h4>
-                {isOverdue(task) && <AlertTriangle className="h-4 w-4 text-destructive" />}
+      {tasks.map((task) => {
+        const isTaskCompleted = task.status === "Completed"
+        const isTaskOverdue = isOverdue(task)
+
+        return (
+          <Link key={task.id} href={`/tasks/${task.id}`}>
+            <Card className={`p-4 transition-colors relative hover:bg-muted/50 ${
+              isTaskCompleted
+                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                : ""
+            }`}>
+              {isTaskCompleted && (
+                <div className="absolute right-2 top-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                </div>
+              )}
+              <div className="flex flex-col space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <h4 className={`font-medium flex-1 ${isTaskCompleted ? "text-green-700 dark:text-green-300" : ""}`}>
+                    {task.description}
+                  </h4>
+                  <div className="flex flex-col gap-2 items-end">
+                    <Badge 
+                      variant={getPriorityColor(task.priority) as any}
+                      className="flex-shrink-0"
+                    >
+                      {getPriorityLabel(task.priority)}
+                    </Badge>
+                    <Badge 
+                      variant={getStatusColor(task.status) as any}
+                      className={`flex-shrink-0 ${
+                        isTaskCompleted ? "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300" : ""
+                      }`}
+                    >
+                      {getStatusLabel(task.status)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Clock className="mr-1 h-3 w-3 flex-shrink-0" />
+                  Son Tarih: {format(new Date(task.completion_date), "d MMMM yyyy")}
+                  {isTaskOverdue && !isTaskCompleted && (
+                    <Badge variant="destructive" className="ml-2 flex-shrink-0">
+                      Gecikmiş
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center text-sm text-muted-foreground">
-                <Clock className="mr-1 h-3 w-3" />
-                Son Tarih: {format(new Date(task.completion_date), "d MMMM yyyy")}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={getPriorityColor(task.priority) as any}>{getPriorityLabel(task.priority)}</Badge>
-              <Badge variant={getStatusColor(task.status) as any}>{getStatusLabel(task.status)}</Badge>
-              <Link href={`/tasks/${task.id}`}>
-                <Button variant="ghost" size="icon">
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </Card>
-      ))}
+            </Card>
+          </Link>
+        )
+      })}
     </div>
   )
 }

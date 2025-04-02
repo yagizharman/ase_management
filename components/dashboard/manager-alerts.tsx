@@ -48,8 +48,15 @@ export function ManagerAlerts({ teamId }: ManagerAlertsProps) {
         const upcoming = response.filter((task: any) => {
           const dueDate = new Date(task.completion_date)
           const today = new Date()
+          
+          // Set both dates to end of day for accurate comparison
+          dueDate.setHours(23, 59, 59, 999)
+          today.setHours(0, 0, 0, 0)
+          
           const diffTime = dueDate.getTime() - today.getTime()
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          
+          // Tasks due in next 3 days (not including today)
           return diffDays <= 3 && diffDays > 0 && task.status !== "Completed"
         })
 
@@ -182,7 +189,7 @@ export function ManagerAlerts({ teamId }: ManagerAlertsProps) {
                     <div className="font-medium">{task.description}</div>
                     <div className="text-sm text-muted-foreground">
                       Son Tarih: {format(new Date(task.completion_date), "d MMMM yyyy", { locale: tr })}
-                      <Badge variant="warning" className="ml-2">
+                      <Badge variant="default" className="ml-2">
                         Yakında Dolacak
                       </Badge>
                     </div>

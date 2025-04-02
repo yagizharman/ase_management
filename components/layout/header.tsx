@@ -43,7 +43,7 @@ export function Header({ toggleMobileSidebar }: HeaderProps) {
       </Button>
 
       <div className="flex-1">
-        <h1 className="text-lg font-semibold md:text-xl">Task Management System</h1>
+        <h1 className="text-lg font-semibold md:text-xl">Görev Yönetim Sistemi</h1>
       </div>
 
       <div className="flex items-center gap-4">

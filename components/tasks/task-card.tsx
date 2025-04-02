@@ -101,7 +101,18 @@ export function TaskCard({ task, onLogEffort, onDeleteTask, canEdit, canDelete, 
           <div className="space-y-2">
             <div className="font-medium line-clamp-2 flex items-center gap-1">
               {task.description}
-              {isOverdue(task) && <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />}
+              {isOverdue(task) && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <AlertTriangle className="h-3 w-3 text-destructive flex-shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Görevinizin bitiş tarihi geçmiştir.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isCreatorManager && (
                 <TooltipProvider>
                   <Tooltip>

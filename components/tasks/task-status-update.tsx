@@ -3,16 +3,28 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2, Clock, Pause, Play, XCircle } from "lucide-react"
+import { useAuth } from "@/context/auth-context"
+import { api } from "@/lib/api"
+import { emailService } from "@/lib/email-service"
 
 interface TaskStatusUpdateProps {
   currentStatus: string
   onStatusChange: (newStatus: string) => Promise<void>
   isDisabled?: boolean
+  taskId?: number // Add task ID for email notifications
+  taskDescription?: string // Add task description for email notifications
 }
 
-export function TaskStatusUpdate({ currentStatus, onStatusChange, isDisabled = false }: TaskStatusUpdateProps) {
+export function TaskStatusUpdate({
+  currentStatus,
+  onStatusChange,
+  isDisabled = false,
+  taskId,
+  taskDescription,
+}: TaskStatusUpdateProps) {
   const [isUpdating, setIsUpdating] = useState(false)
   const [status, setStatus] = useState(currentStatus)
+  const { user } = useAuth()
 
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === status || isDisabled) return
@@ -20,6 +32,54 @@ export function TaskStatusUpdate({ currentStatus, onStatusChange, isDisabled = f
     try {
       setIsUpdating(true)
       await onStatusChange(newStatus)
+
+      // Send notification to team manager if task ID and description are provided
+      if (taskId && taskDescription && user && user.role !== "manager") {
+        // Get the team manager's email
+        try {
+          const usersData = await api.get("/users")
+          const teamManager = usersData.find((u: any) => u.role === "manager" && u.team_id === user.team_id)
+
+          if (teamManager) {
+            const updateDetails = `Status changed from "${getStatusLabel(status)}" to "${getStatusLabel(newStatus)}"`
+
+            // Get task details
+            const taskData = await api.get(`/tasks/${taskId}`)
+
+            await emailService.sendTaskUpdateNotification(
+              taskId, 
+              taskDescription, 
+              teamManager.email, 
+              updateDetails,
+              {
+                id: taskData.id,
+                description: taskData.description,
+                priority: taskData.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+                team_id: taskData.team_id,
+                start_date: taskData.start_date,
+                completion_date: taskData.completion_date,
+                creator_id: taskData.creator_id,
+                planned_labor: taskData.planned_labor,
+                actual_labor: taskData.actual_labor,
+                work_size: taskData.work_size,
+                roadmap: taskData.roadmap,
+                status: newStatus as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled", // Use the new status
+                assignees: taskData.assignees.map((a: any) => ({
+                  user_id: a.user_id,
+                  role: a.role,
+                  planned_labor: a.planned_labor,
+                  actual_labor: a.actual_labor,
+                  user: usersData.find((u: any) => u.id === a.user_id)
+                }))
+              },
+              user.name
+            )
+          }
+        } catch (error) {
+          console.error("Error sending status update notification:", error)
+        }
+      }
+
       setStatus(newStatus)
     } catch (error) {
       console.error("Error updating status:", error)

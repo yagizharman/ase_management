@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
 import { emailService } from "@/lib/email-service"
@@ -250,9 +250,9 @@ export default function NewTaskPage() {
 
     // Yönetici tarafından oluşturulan görevlerde, aynı kişi hem görevli hem de görev ortağı olamaz
     if (isManager) {
-      const assigneeId = formData.assignees.find(a => a.role === "assignee")?.user_id
-      const isAlsoPartner = formData.assignees.some(a => a.role === "partner" && a.user_id === assigneeId)
-      
+      const assigneeId = formData.assignees.find((a) => a.role === "assignee")?.user_id
+      const isAlsoPartner = formData.assignees.some((a) => a.role === "partner" && a.user_id === assigneeId)
+
       if (isAlsoPartner) {
         setError("Aynı kişi hem görevli hem de görev ortağı olamaz")
         toast.error("Aynı kişi hem görevli hem de görev ortağı olamaz")
@@ -262,8 +262,8 @@ export default function NewTaskPage() {
 
     // Çalışanlar kendilerini görev ortağı olarak ekleyemezler
     if (!isManager) {
-      const isUserPartner = formData.assignees.some(a => a.role === "partner" && a.user_id === user?.id)
-      
+      const isUserPartner = formData.assignees.some((a) => a.role === "partner" && a.user_id === user?.id)
+
       if (isUserPartner) {
         setError("Kendinizi görev ortağı olarak ekleyemezsiniz")
         toast.error("Kendinizi görev ortağı olarak ekleyemezsiniz")
@@ -279,24 +279,100 @@ export default function NewTaskPage() {
       const createdTask = await api.post("/tasks", formData)
 
       // Send email notifications
+      // 1. If manager creates a task, notify assignees
       if (user?.role === "manager") {
         // Get assignee emails
         const assigneeIds = formData.assignees.filter((a) => a.role === "assignee").map((a) => a.user_id)
-
         const assigneeUsers = users.filter((u) => assigneeIds.includes(u.id))
         const assigneeEmails = assigneeUsers.map((u) => u.email)
 
-        await emailService.sendTaskAssignmentNotification(createdTask.id, formData.description, assigneeEmails)
+        if (assigneeEmails.length > 0) {
+          await emailService.sendTaskAssignmentNotification(
+            createdTask.id,
+            formData.description,
+            assigneeEmails,
+            {
+              id: createdTask.id,
+              description: formData.description,
+              priority: formData.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+              team_id: formData.team_id,
+              start_date: formData.start_date,
+              completion_date: formData.completion_date,
+              creator_id: user?.id || 0,
+              planned_labor: formData.planned_labor,
+              actual_labor: 0,
+              work_size: formData.work_size,
+              roadmap: formData.roadmap,
+              status: formData.status as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled",
+              assignees: formData.assignees.map(a => ({
+                user_id: a.user_id,
+                role: a.role,
+                planned_labor: a.planned_labor,
+                actual_labor: a.actual_labor,
+                user: users.find(u => u.id === a.user_id)
+              }))
+            }
+          )
+        }
       }
 
-      // Send notifications to partners if there are any
+      // 2. Send notifications to partners if there are any
       const partnerIds = formData.assignees.filter((a) => a.role === "partner").map((a) => a.user_id)
-
       if (partnerIds.length > 0) {
         const partnerUsers = users.filter((u) => partnerIds.includes(u.id))
         const partnerEmails = partnerUsers.map((u) => u.email)
 
-        await emailService.sendTaskPartnerNotification(createdTask.id, formData.description, partnerEmails)
+        if (partnerEmails.length > 0) {
+          await emailService.sendTaskPartnerNotification(
+            createdTask.id,
+            formData.description,
+            partnerEmails,
+            {
+              id: createdTask.id,
+              description: formData.description,
+              priority: formData.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+              team_id: formData.team_id,
+              start_date: formData.start_date,
+              completion_date: formData.completion_date,
+              creator_id: user?.id || 0,
+              planned_labor: formData.planned_labor,
+              actual_labor: 0,
+              work_size: formData.work_size,
+              roadmap: formData.roadmap,
+              status: formData.status as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled",
+              assignees: formData.assignees.map(a => ({
+                user_id: a.user_id,
+                role: a.role,
+                planned_labor: a.planned_labor,
+                actual_labor: a.actual_labor,
+                user: users.find(u => u.id === a.user_id)
+              }))
+            }
+          )
+        }
+      }
+
+      // 3. Send notifications to "notified" users if there are any
+      const notifiedIds = formData.assignees.filter((a) => a.role === "notified").map((a) => a.user_id)
+      if (notifiedIds.length > 0) {
+        const notifiedUsers = users.filter((u) => notifiedIds.includes(u.id))
+        const notifiedEmails = notifiedUsers.map((u) => u.email)
+
+        if (notifiedEmails.length > 0) {
+          await emailService.sendTaskNotificationToUsers(createdTask.id, formData.description, notifiedEmails, {
+            id: createdTask.id,
+            description: formData.description,
+            priority: formData.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+            team_id: formData.team_id,
+            start_date: formData.start_date,
+            completion_date: formData.completion_date,
+            creator_id: user?.id || 0,
+            planned_labor: formData.assignees.reduce((acc, curr) => acc + curr.planned_labor, 0),
+            actual_labor: formData.assignees.reduce((acc, curr) => acc + curr.planned_labor, 0),
+            work_size: formData.work_size,
+            roadmap: formData.roadmap, 
+          })
+        }
       }
 
       toast.success("Görev başarıyla oluşturuldu")
@@ -312,7 +388,7 @@ export default function NewTaskPage() {
   }
 
   const teamUsers = users.filter((u) => u.team_id === formData.team_id)
-  const assigneeId = formData.assignees.find(a => a.role === "assignee")?.user_id
+  const assigneeId = formData.assignees.find((a) => a.role === "assignee")?.user_id
 
   return (
     <AppShell>
@@ -560,7 +636,7 @@ export default function NewTaskPage() {
                   .filter((a) => a.role === "partner")
                   .map((partner, index) => {
                     const partnerIndex = formData.assignees.findIndex((a) => a === partner)
-                    
+
                     return (
                       <div key={index} className="rounded-md border p-4 bg-card">
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-end">
@@ -572,19 +648,19 @@ export default function NewTaskPage() {
                               value={partner.user_id.toString()}
                               onValueChange={(value) => {
                                 const userId = Number.parseInt(value)
-                                
+
                                 // Yönetici tarafından oluşturulan görevlerde, aynı kişi hem görevli hem de görev ortağı olamaz
                                 if (isManager && userId === assigneeId) {
                                   toast.error("Aynı kişi hem görevli hem de görev ortağı olamaz")
                                   return
                                 }
-                                
+
                                 // Çalışanlar kendilerini görev ortağı olarak ekleyemezler
                                 if (!isManager && userId === user?.id) {
                                   toast.error("Kendinizi görev ortağı olarak ekleyemezsiniz")
                                   return
                                 }
-                                
+
                                 handleAssigneeChange(partnerIndex, "user_id", userId)
                               }}
                             >
@@ -593,8 +669,8 @@ export default function NewTaskPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 {teamUsers
-                                  .filter(u => !isManager || u.id !== assigneeId) // Yönetici ise, görevli olarak atanan kişiyi filtrele
-                                  .filter(u => isManager || u.id !== user?.id) // Çalışan ise, kendisini filtrele
+                                  .filter((u) => !isManager || u.id !== assigneeId) // Yönetici ise, görevli olarak atanan kişiyi filtrele
+                                  .filter((u) => isManager || u.id !== user?.id) // Çalışan ise, kendisini filtrele
                                   .map((user) => (
                                     <SelectItem key={user.id} value={user.id.toString()}>
                                       {user.name}
@@ -726,3 +802,4 @@ export default function NewTaskPage() {
     </AppShell>
   )
 }
+

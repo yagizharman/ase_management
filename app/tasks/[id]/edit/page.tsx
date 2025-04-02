@@ -55,7 +55,7 @@ interface TaskAssignee {
 interface Task {
   id: number
   description: string
-  priority: string
+  priority: "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük"
   team_id: number
   start_date: string
   completion_date: string
@@ -64,7 +64,7 @@ interface Task {
   actual_labor: number
   work_size: number
   roadmap: string
-  status: string
+  status: "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled"
   assignees: TaskAssignee[]
 }
 
@@ -331,6 +331,58 @@ export default function EditTaskPage() {
 
       toast.success(`${effortHours} saat çalışma kaydedildi`)
       setEffortLogOpen(false)
+
+      // Send email notification to manager if the user is not a manager
+      if (user?.role !== "manager") {
+        // Find the team manager
+        const teamManager = users.find((u) => u.role === "manager" && u.team_id === user?.team_id)
+
+        if (teamManager) {
+          console.log("Sending email with task details:", {
+            id: task.id,
+            description: task.description,
+            priority: task.priority,
+            team_id: task.team_id,
+            start_date: task.start_date,
+            completion_date: task.completion_date,
+            creator_id: task.creator_id,
+            planned_labor: task.planned_labor,
+            actual_labor: task.actual_labor + effortHours,
+            work_size: task.work_size,
+            roadmap: task.roadmap,
+            status: task.status
+          });
+
+          await emailService.sendTaskUpdateNotification(
+            task.id,
+            task.description,
+            teamManager.email,
+            effortDetails ? `${effortHours} saat çalışma: ${effortDetails}` : `${effortHours} saat çalışma kaydedildi`,
+            {
+              id: task.id,
+              description: task.description,
+              priority: task.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+              team_id: task.team_id,
+              start_date: task.start_date,
+              completion_date: task.completion_date,
+              creator_id: task.creator_id,
+              planned_labor: task.planned_labor,
+              actual_labor: task.actual_labor + effortHours,
+              work_size: task.work_size,
+              roadmap: task.roadmap,
+              status: task.status as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled",
+              assignees: task.assignees.map(a => ({
+                user_id: a.user_id,
+                role: a.role,
+                planned_labor: a.planned_labor,
+                actual_labor: a.user_id === assignee.user_id ? a.actual_labor + effortHours : a.actual_labor,
+                user: users.find(u => u.id === a.user_id)
+              }))
+            },
+            user?.name || "Bir kullanıcı"
+          )
+        }
+      }
     } catch (error) {
       console.error("Error logging effort:", error)
       toast.error("Çalışma saati kaydedilirken hata oluştu")
@@ -464,6 +516,10 @@ export default function EditTaskPage() {
         }
       }
 
+      // Add history note for the update
+      const updateDetails = `Status updated to: ${task.status}`
+      updateData.history_note = updateDetails
+
       // Submit the form
       const updatedTask = await api.put(`/tasks/${taskId}`, updateData)
 
@@ -477,7 +533,29 @@ export default function EditTaskPage() {
             task.id,
             task.description,
             teamManager.email,
-            `Task status updated to: ${task.status}`,
+            updateDetails,
+            {
+              id: task.id,
+              description: task.description,
+              priority: task.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+              team_id: task.team_id,
+              start_date: task.start_date,
+              completion_date: task.completion_date,
+              creator_id: task.creator_id,
+              planned_labor: task.planned_labor,
+              actual_labor: task.actual_labor,
+              work_size: task.work_size,
+              roadmap: task.roadmap,
+              status: task.status as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled",
+              assignees: task.assignees.map(a => ({
+                user_id: a.user_id,
+                role: a.role,
+                planned_labor: a.planned_labor,
+                actual_labor: a.actual_labor,
+                user: users.find(u => u.id === a.user_id)
+              }))
+            },
+            user?.name
           )
         }
       }

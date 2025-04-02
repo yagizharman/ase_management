@@ -99,6 +99,23 @@ class ApiClient {
     })
   }
 
+  // For notifications
+  getNotifications(email: string) {
+    return this.get(`/notifications?recipient_email=${email}`)
+  }
+
+  markNotificationAsRead(notificationId: number, email: string) {
+    return this.put(`/notifications/${notificationId}/read`, {
+      recipient_email: email,
+    })
+  }
+
+  markAllNotificationsAsRead(email: string) {
+    return this.put(`/notifications/read-all`, {
+      recipient_email: email,
+    })
+  }
+
   // For analytics
   getTaskDistribution(userId: number, startDate: string, endDate: string) {
     return this.get(`/analytics/user-task-distribution?user_id=${userId}&start_date=${startDate}&end_date=${endDate}`)

@@ -468,6 +468,8 @@ export default function TaskDetailPage() {
                 currentStatus={task.status}
                 onStatusChange={handleStatusUpdate}
                 isDisabled={userPermission === "view"}
+                taskId={task.id}
+                taskDescription={task.description}
               />
               {userPermission === "view" && (
                 <p className="text-sm text-muted-foreground mt-4">

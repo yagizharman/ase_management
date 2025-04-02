@@ -42,8 +42,19 @@ export function DailyTaskPopup({ userId }: DailyTaskPopupProps) {
           return isToday(completionDate) || isOverdue
         })
 
-        // Sort by priority (High > Medium > Low)
+        // Sort tasks: Overdue first, then by completion status, then by priority
         todayTasks.sort((a: any, b: any) => {
+          // First sort by completion status (incomplete first)
+          if (a.status === "Completed" && b.status !== "Completed") return 1
+          if (a.status !== "Completed" && b.status === "Completed") return -1
+
+          // Then sort by overdue status
+          const isAOverdue = isOverdue(a)
+          const isBOverdue = isOverdue(b)
+          if (isAOverdue && !isBOverdue) return -1
+          if (!isAOverdue && isBOverdue) return 1
+
+          // Finally sort by priority
           const priorityOrder = { High: 0, Medium: 1, Low: 2 }
           return (
             priorityOrder[a.priority as keyof typeof priorityOrder] -
@@ -180,39 +191,67 @@ export function DailyTaskPopup({ userId }: DailyTaskPopupProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              {tasks.map((task) => (
-                <div key={task.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium">{task.description}</h3>
-                      <div className="flex space-x-2">
-                        <Badge variant={getPriorityColor(task.priority) as any}>
-                          {getPriorityLabel(task.priority)}
-                        </Badge>
-                        <Badge variant={getStatusColor(task.status) as any}>{getStatusLabel(task.status)}</Badge>
+              {tasks.map((task) => {
+                const isTaskCompleted = task.status === "Completed"
+                const isTaskOverdue = isOverdue(task)
+
+                return (
+                  <div
+                    key={task.id}
+                    className={`border rounded-lg p-4 transition-colors relative ${
+                      isTaskCompleted
+                        ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                        : "hover:bg-muted/50"
+                    }`}
+                  >
+                    {isTaskCompleted && (
+                      <div className="absolute right-2 top-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      </div>
+                    )}
+                    <div className="flex flex-col space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <h3 className={`font-medium flex-1 ${isTaskCompleted ? "text-green-700 dark:text-green-300" : ""}`}>
+                          {task.description}
+                        </h3>
+                        <div className="flex flex-col gap-2 items-end">
+                          <Badge variant={getPriorityColor(task.priority) as any}>
+                            {getPriorityLabel(task.priority)}
+                          </Badge>
+                          <Badge 
+                            variant={getStatusColor(task.status) as any}
+                            className={isTaskCompleted ? "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300" : ""}
+                          >
+                            {getStatusLabel(task.status)}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <Clock className="mr-1 h-3 w-3" />
+                          Son Tarih: {format(new Date(task.completion_date), "d MMMM yyyy")}
+                          {isTaskOverdue && !isTaskCompleted && (
+                            <Badge variant="destructive" className="ml-2">
+                              Gecikmiş
+                            </Badge>
+                          )}
+                        </div>
+
+                        <Link href={`/tasks/${task.id}`}>
+                          <Button 
+                            variant={isTaskCompleted ? "outline" : "default"} 
+                            size="sm"
+                            className={isTaskCompleted ? "border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-800" : ""}
+                          >
+                            Detayları Görüntüle
+                          </Button>
+                        </Link>
                       </div>
                     </div>
-
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Clock className="mr-1 h-3 w-3" />
-                      Son Tarih: {format(new Date(task.completion_date), "d MMMM yyyy")}
-                      {isOverdue(task) && (
-                        <Badge variant="destructive" className="ml-2">
-                          Gecikmiş
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Link href={`/tasks/${task.id}`}>
-                        <Button variant="outline" size="sm">
-                          Detayları Görüntüle
-                        </Button>
-                      </Link>
-                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

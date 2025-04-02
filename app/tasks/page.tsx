@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { EffortLogDialog } from "@/components/tasks/effort-log-dialog"
 import { TaskListView } from "@/components/tasks/task-list-view"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { emailService } from "@/lib/email-service"
 
 interface TaskAssignee {
   user_id: number
@@ -72,6 +73,7 @@ export default function TasksPage() {
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [effortLogOpen, setEffortLogOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+  const [selectedTaskDescription, setSelectedTaskDescription] = useState<string>("")
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban")
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [taskToDelete, setTaskToDelete] = useState<number | null>(null)
@@ -147,6 +149,9 @@ export default function TasksPage() {
         case "not-started":
           setStatusFilter("Not Started")
           break
+        case "in-progress":
+          setStatusFilter("In Progress")
+          break
         default:
           setStatusFilter("all")
       }
@@ -166,14 +171,24 @@ export default function TasksPage() {
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "overdue") {
-        result = result.filter((task) => new Date(task.completion_date) < new Date() && task.status !== "Completed")
+        result = result.filter((task) => {
+          const dueDate = new Date(task.completion_date)
+          const today = new Date()
+          // Set both dates to start of day for accurate comparison
+          dueDate.setHours(0, 0, 0, 0)
+          today.setHours(0, 0, 0, 0)
+          return dueDate < today && task.status !== "Completed"
+        })
       } else if (statusFilter === "upcoming") {
         result = result.filter((task) => {
           const dueDate = new Date(task.completion_date)
           const today = new Date()
+          // Set both dates to start of day for accurate comparison
+          dueDate.setHours(0, 0, 0, 0)
+          today.setHours(0, 0, 0, 0)
           const diffTime = dueDate.getTime() - today.getTime()
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-          return diffDays <= 3 && diffDays > 0 && task.status !== "Completed"
+          return diffDays <= 3 && diffDays >= 0 && task.status !== "Completed"
         })
       } else {
         result = result.filter((task) => task.status === statusFilter)
@@ -252,6 +267,53 @@ export default function TasksPage() {
         history_note: `Durum "${getStatusLabel(taskToUpdate.status)}" -> "${getStatusLabel(newStatus)}" olarak değiştirildi`,
       })
 
+      // Send email notification to manager if user is not a manager
+      if (user && user.role !== "manager") {
+        try {
+          // Get the team manager's email
+          const usersData = await api.get("/users")
+          const teamManager = usersData.find((u: any) => u.role === "manager" && u.team_id === user.team_id)
+
+          if (teamManager) {
+            const updateDetails = `Durum "${getStatusLabel(taskToUpdate.status)}" -> "${getStatusLabel(newStatus)}" olarak değiştirildi`
+
+            // Get task details
+            const taskData = await api.get(`/tasks/${taskId}`)
+
+            await emailService.sendTaskUpdateNotification(
+              taskId,
+              taskToUpdate.description,
+              teamManager.email,
+              updateDetails,
+              {
+                id: taskData.id,
+                description: taskData.description,
+                priority: taskData.priority as "High" | "Medium" | "Low" | "Yüksek" | "Orta" | "Düşük",
+                team_id: taskData.team_id,
+                start_date: taskData.start_date,
+                completion_date: taskData.completion_date,
+                creator_id: taskData.creator_id,
+                planned_labor: taskData.planned_labor,
+                actual_labor: taskData.actual_labor,
+                work_size: taskData.work_size,
+                roadmap: taskData.roadmap,
+                status: newStatus as "Not Started" | "In Progress" | "Paused" | "Completed" | "Cancelled",
+                assignees: taskData.assignees.map((a: any) => ({
+                  user_id: a.user_id,
+                  role: a.role,
+                  planned_labor: a.planned_labor,
+                  actual_labor: a.actual_labor,
+                  user: usersData.find((u: any) => u.id === a.user_id)
+                }))
+              },
+              user.name
+            )
+          }
+        } catch (error) {
+          console.error("Error sending status update notification:", error)
+        }
+      }
+
       toast.success(`Görev durumu "${getStatusLabel(newStatus)}" olarak güncellendi`)
     } catch (error) {
       console.error("Error updating task status:", error)
@@ -263,8 +325,12 @@ export default function TasksPage() {
   }
 
   const handleLogEffort = (taskId: number) => {
-    setSelectedTaskId(taskId)
-    setEffortLogOpen(true)
+    const task = tasks.find((t) => t.id === taskId)
+    if (task) {
+      setSelectedTaskId(taskId)
+      setSelectedTaskDescription(task.description)
+      setEffortLogOpen(true)
+    }
   }
 
   const handleEffortSubmit = async (hours: number, details: string) => {
@@ -578,7 +644,13 @@ export default function TasksPage() {
         />
       )}
 
-      <EffortLogDialog open={effortLogOpen} onOpenChange={setEffortLogOpen} onSubmit={handleEffortSubmit} />
+      <EffortLogDialog
+        open={effortLogOpen}
+        onOpenChange={setEffortLogOpen}
+        onSubmit={handleEffortSubmit}
+        taskId={selectedTaskId}
+        taskDescription={selectedTaskDescription}
+      />
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>

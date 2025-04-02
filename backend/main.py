@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # Make sure routers path is correct if structure changed
-from routers import auth, tasks, users, analytics, teams # Added teams
+from routers import auth, tasks, users, analytics, teams, notifications  # Added teams
 # Potentially add teams router if created
 
 app = FastAPI(
@@ -29,6 +29,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(teams.router, prefix="/api/teams", tags=["Teams"]) # Added Teams router
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 # Optional: Add a root endpoint for health check / info
 @app.get("/", tags=["Root"])

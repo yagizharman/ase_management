@@ -84,10 +84,15 @@ export default function DashboardPage() {
   const upcomingTasks = tasks.filter((task) => {
     const dueDate = new Date(task.completion_date)
     const today = new Date()
+    // Set both dates to start of day for accurate comparison
+    dueDate.setHours(0, 0, 0, 0)
+    today.setHours(0, 0, 0, 0)
     const diffTime = dueDate.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays <= 3 && diffDays > 0 && task.status !== "Completed"
+    return diffDays <= 3 && diffDays >= 0 && task.status !== "Completed"
   })
+
+
 
   const notStartedTasks = tasks.filter((task) => {
     const startDate = new Date(task.start_date)
@@ -108,10 +113,12 @@ export default function DashboardPage() {
 
   // Get tasks due this week
   const today = new Date()
+  today.setHours(0, 0, 0, 0) // Set to start of day
   const endOfWeek = addDays(today, 7)
+  endOfWeek.setHours(23, 59, 59, 999) // Set to end of day
   const tasksThisWeek = tasks.filter((task) => {
     const dueDate = new Date(task.completion_date)
-    return isAfter(dueDate, today) && isBefore(dueDate, endOfWeek)
+    return (dueDate >= today && dueDate <= endOfWeek) && task.status !== "Completed"
   })
 
   return (
@@ -208,7 +215,7 @@ export default function DashboardPage() {
               </Badge>
               {inProgressTasks > 0 && (
                 <Link
-                  href="/tasks?filter=In Progress"
+                  href="/tasks?filter=in-progress"
                   className="text-xs text-amber-600 dark:text-amber-400 ml-2 hover:underline"
                 >
                   Görüntüle
@@ -358,33 +365,31 @@ export default function DashboardPage() {
                     <p>Bu hafta teslim edilecek görev bulunmuyor</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
                     {tasksThisWeek.slice(0, 5).map((task) => (
-                      <div key={task.id} className="flex items-center justify-between border-b pb-3">
-                        <div className="flex-1">
-                          <p className="font-medium truncate">{task.description}</p>
-                          <div className="flex items-center text-sm text-muted-foreground">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            {format(new Date(task.completion_date), "d MMMM")}
+                      <Link key={task.id} href={`/tasks/${task.id}`} className="block">
+                        <div className="flex items-center justify-between border-b pb-3 hover:bg-muted/50 rounded-lg p-2 -mx-2 cursor-pointer">
+                          <div className="flex-1 min-w-0"> {/* min-width: 0 prevents flex item from overflowing */}
+                            <p className="font-medium truncate">{task.description}</p>
+                            <div className="flex items-center text-sm text-muted-foreground">
+                              <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
+                              {format(new Date(task.completion_date), "d MMMM")}
+                            </div>
                           </div>
+                          <Badge
+                            variant={
+                              task.priority === "High"
+                                ? "destructive"
+                                : task.priority === "Medium"
+                                  ? "default"
+                                  : "secondary"
+                            }
+                            className="ml-2 flex-shrink-0"
+                          >
+                            {task.priority === "High" ? "Yüksek" : task.priority === "Medium" ? "Orta" : "Düşük"}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant={
-                            task.priority === "High"
-                              ? "destructive"
-                              : task.priority === "Medium"
-                                ? "warning"
-                                : "secondary"
-                          }
-                        >
-                          {task.priority === "High" ? "Yüksek" : task.priority === "Medium" ? "Orta" : "Düşük"}
-                        </Badge>
-                        <Link href={`/tasks/${task.id}`}>
-                          <Button variant="ghost" size="sm" className="ml-2">
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 )}

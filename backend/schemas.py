@@ -209,3 +209,10 @@ class PasswordUpdateRequest(BaseModel):
 # To easily handle partial updates with Pydantic models
 def get_update_data(model: BaseModel) -> dict:
     return model.dict(exclude_unset=True)
+
+# --- Notifications ---
+class NotificationBase(BaseModel):
+    recipient_email: EmailStr
+    message: str
+    is_read: bool = False
+    
