@@ -215,4 +215,21 @@ class NotificationBase(BaseModel):
     recipient_email: EmailStr
     message: str
     is_read: bool = False
-    
+
+
+
+class TeamTaskDistributionItem(BaseModel):
+    tasks: List[dict]
+    dailyDistribution: List[dict]
+
+class DailyTaskDistribution(BaseModel):
+    date: date
+    planned_labor: float
+    actual_labor: float
+    remaining_labor: float
+    tasks: List[TaskResponse]  # Bu tarih için detaylı görev bilgileri
+
+class UserDetailedTaskDistribution(BaseModel):
+    user_id: int
+    user_name: str
+    daily_distribution: List[DailyTaskDistribution]

@@ -1,105 +1,126 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from database import get_db
-from datetime import date # Use date for date-only fields
-from routers.auth import get_current_user, UserInfo
+from schemas import UserDetailedTaskDistribution, DailyTaskDistribution, TaskResponse
 from typing import List
-from schemas import UserTaskDistributionItem, TeamPerformanceItem # Import response schemas
+from routers.auth import get_current_user, UserInfo
+from datetime import date, timedelta
+import pyodbc
 
 router = APIRouter()
 
-# Helper to convert pyodbc rows to dicts
-def rows_to_dicts(cursor):
-    columns = [column[0] for column in cursor.description]
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+# Yardımcı fonksiyon: Günlük işçilik dağılımı hesaplama
+def calculate_daily_labor_distribution(tasks: List[dict], start_date: date, end_date: date):
+    distribution = {}
+    current_date = start_date
+    while current_date <= end_date:
+        distribution[current_date] = {
+            "date": current_date,
+            "planned_labor": 0,
+            "actual_labor": 0,
+            "remaining_labor": 0,
+            "tasks": []
+        }
+        current_date += timedelta(days=1)
 
-@router.get("/user-task-distribution", response_model=List[UserTaskDistributionItem])
-def user_task_distribution(
-    # Use current user's ID by default, allow manager to query others?
+    for task in tasks:
+        task_start = max(task["start_date"], start_date)
+        task_end = min(task["completion_date"], end_date)
+        total_days = (task_end - task_start).days + 1
+
+        daily_planned = (task["planned_labor"] - task.get("actual_labor", 0)) / total_days if total_days > 0 else 0
+
+        current_date = task_start
+        while current_date <= task_end:
+            if current_date in distribution:
+                distribution[current_date]["planned_labor"] += daily_planned
+                distribution[current_date]["actual_labor"] += task.get("actual_labor", 0) / total_days if total_days > 0 else 0
+                distribution[current_date]["remaining_labor"] = distribution[current_date]["planned_labor"] - distribution[current_date]["actual_labor"]
+                distribution[current_date]["tasks"].append(task)
+            current_date += timedelta(days=1)
+
+    return [DailyTaskDistribution(**day) for day in distribution.values()]
+
+# Çalışan için detaylı görev dağılım endpoint'i
+@router.get("/user-detailed-distribution", response_model=UserDetailedTaskDistribution)
+def get_user_detailed_distribution(
     user_id: int,
-    start_date: date = Query(...), # Make query params explicit
-    end_date: date = Query(...),
-    db=Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user)
-):
-    # Permission Check: Can current_user view distribution for user_id?
-    if user_id != current_user.id and current_user.role != 'manager':
-         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view distribution for other users")
-    # Optional: Manager can only view users in their team?
-    if current_user.role == 'manager':
-         cursor_perm = db.cursor()
-         cursor_perm.execute("SELECT team_id FROM users WHERE id = ?", (user_id,))
-         target_user_team = cursor_perm.fetchone()
-         if not target_user_team or target_user_team[0] != current_user.team_id:
-              raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager can only view users within their team")
-
-
-    cursor = db.cursor()
-    try:
-        # Fetch tasks assigned to the user within the date range
-        # Group by requested fields
-        # Note: Column names in SQL result must match Pydantic model field names (or use aliases)
-        # Using original casing from old schema for compatibility, but snake_case is preferred (e.g., work_size AS ValueSize)
-        cursor.execute("""
-            SELECT
-                t.priority AS Priority,
-                t.work_size AS ValueSize,
-                t.completion_date AS DueDate,
-                COUNT(t.id) as TaskCount
-            FROM tasks t
-            JOIN task_assignees ta ON t.id = ta.task_id
-            WHERE ta.user_id = ? AND ta.role IN ('assignee', 'partner')
-              AND t.start_date BETWEEN ? AND ? -- Or filter based on completion_date? Clarify requirement.
-            GROUP BY t.priority, t.work_size, t.completion_date
-            ORDER BY t.completion_date, t.priority -- Add ordering
-        """, (user_id, start_date, end_date))
-        distribution = rows_to_dicts(cursor)
-        return distribution
-    except pyodbc.Error as e:
-        print(f"Database error fetching user task distribution: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch task distribution")
-    except Exception as e:
-        print(f"Unexpected error fetching user task distribution: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred")
-
-
-@router.get("/team-performance", response_model=List[TeamPerformanceItem])
-def team_performance(
-    # Use current user's team ID by default
-    team_id: int,
     start_date: date = Query(...),
     end_date: date = Query(...),
     db=Depends(get_db),
     current_user: UserInfo = Depends(get_current_user)
 ):
-    # Permission Check: Can user view performance for this team_id?
-    if team_id != current_user.team_id and current_user.role != 'manager': # Allow manager override?
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view performance data for other teams")
-    # Even if manager, restrict to their own team based on PDF?
-    if current_user.role == 'manager' and team_id != current_user.team_id:
-         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Managers can only view performance for their own team")
-
+    if user_id != current_user.id and current_user.role != 'manager':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yetkisiz erişim.")
 
     cursor = db.cursor()
-    try:
-        # Sum planned/actual labor from task_assignees for users in the team within the date range
-        # Note: Column names in SQL result must match Pydantic model field names (or use aliases)
-        cursor.execute("""
-            SELECT
-                ta.user_id AS UserId,
-                SUM(ta.planned_labor) AS TotalPlanned, -- Per-user planned labor on tasks
-                SUM(ta.actual_labor) AS TotalSpent    -- Per-user actual labor
-            FROM task_assignees ta
-            JOIN tasks t ON ta.task_id = t.id
-            WHERE t.team_id = ?
-              AND t.start_date BETWEEN ? AND ? -- Or filter based on completion_date? Clarify requirement.
-              AND ta.role IN ('assignee', 'partner') -- Include partners in performance? Check req.
-            GROUP BY ta.user_id
-        """, (team_id, start_date, end_date))
-        performance = rows_to_dicts(cursor)
-        return performance
-    except pyodbc.Error as e:
-        print(f"Database error fetching team performance: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch team performance")
-    except Exception as e:
-        print(f"Unexpected error fetching team performance: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred")
+    cursor.execute("""
+        SELECT t.id, t.description, t.priority, t.start_date, t.completion_date, ta.planned_labor, ta.actual_labor
+        FROM tasks t
+        JOIN task_assignees ta ON t.id = ta.task_id
+        WHERE ta.user_id = ? AND t.start_date BETWEEN ? AND ?
+    """, (user_id, start_date, end_date))
+
+    tasks = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+
+    daily_distribution = calculate_daily_labor_distribution(tasks, start_date, end_date)
+
+    cursor.execute("SELECT name FROM users WHERE id = ?", (user_id,))
+    user_name = cursor.fetchone()[0]
+
+    return UserDetailedTaskDistribution(
+        user_id=user_id,
+        user_name=user_name,
+        daily_distribution=daily_distribution
+    )
+
+# Yönetici için optimize edilmiş görev dağılımı endpoint'i
+@router.post("/optimize-task-distribution", response_model=List[UserDetailedTaskDistribution])
+def optimize_task_distribution(
+    team_id: int,
+    optimization_param: str = Query("priority", enum=["priority", "work_size", "completion_date"]),
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db=Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user)
+):
+    if current_user.role != 'manager' or current_user.team_id != team_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yetkisiz erişim.")
+
+    cursor = db.cursor()
+
+    ordering = {
+        "priority": "CASE t.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END",
+        "work_size": "t.work_size DESC",
+        "completion_date": "t.completion_date"
+    }
+
+    cursor.execute(f"""
+        SELECT u.id as user_id, u.name as user_name, t.id, t.description, t.priority, t.start_date, t.completion_date, ta.planned_labor, ta.actual_labor
+        FROM tasks t
+        JOIN task_assignees ta ON t.id = ta.task_id
+        JOIN users u ON ta.user_id = u.id
+        WHERE t.team_id = ? AND t.start_date BETWEEN ? AND ?
+        ORDER BY {ordering[optimization_param]}, t.start_date
+    """, (team_id, start_date, end_date))
+
+    rows = cursor.fetchall()
+    columns = [column[0] for column in cursor.description]
+
+    user_tasks = {}
+    for row in rows:
+        data = dict(zip(columns, row))
+        user_id = data["user_id"]
+        user_name = data["user_name"]
+        user_tasks.setdefault(user_id, {"user_name": user_name, "tasks": []})
+        user_tasks[user_id]["tasks"].append(data)
+
+    response = []
+    for user_id, info in user_tasks.items():
+        daily_distribution = calculate_daily_labor_distribution(info["tasks"], start_date, end_date)
+        response.append(UserDetailedTaskDistribution(
+            user_id=user_id,
+            user_name=info["user_name"],
+            daily_distribution=daily_distribution
+        ))
+
+    return response
